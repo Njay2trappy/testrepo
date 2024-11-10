@@ -69,4 +69,5 @@ async function sendTransaction(senderWallet, depositAmount, adminWalletAddress) 
 
 // Handle the /start command
 bot.command('start', (ctx) => {
-    ctx.reply('Welcome! I am your Solana payment bot. You can
+    ctx.reply('Welcome! I am your Solana payment bot. You can deposit USDT and I will convert it to SOL. Use the /deposit command to start the deposit process.');
+});
