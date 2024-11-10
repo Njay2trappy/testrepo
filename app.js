@@ -1,7 +1,7 @@
 require('dotenv').config(); // Load environment variables
 const { Keypair, Transaction, SystemProgram, Connection, PublicKey } = require('@solana/web3.js');
 const { TELEGRAM_BOT_TOKEN, ADMIN_WALLET_ADDRESS, ADMIN_USER_ID } = process.env;
-const { Telegraf } = require('telegraf');
+const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 
 // Initialize the Telegram bot using Telegraf
@@ -84,59 +84,11 @@ async function monitorDeposit(wallet, userId, username, requiredLamports, timeou
                 await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit from @${username} transferred to admin wallet. Transaction ID: ${signature}`);
 
                 clearInterval(intervalId);
-                // Expire the wallet after the transaction is complete
-                wallet = null; // Expiring the wallet
+                wallet = generateWallet(); // Generate a new wallet after the transaction
+                await bot.telegram.sendMessage(userId, `New wallet address for next deposit: ${wallet.publicKey.toBase58()}`);
             } else if (attempts >= maxAttempts) {
                 await bot.telegram.sendMessage(userId, "Deposit timed out. No funds detected within the allowed time.");
                 await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit attempt by @${username} has timed out.`);
                 clearInterval(intervalId);
-                // Expire the wallet after the timeout
-                wallet = null; // Expiring the wallet
-            }
-        } catch (error) {
-            console.error("Error monitoring deposit:", error);
-            await bot.telegram.sendMessage(ADMIN_USER_ID, `Error monitoring deposit: ${error.message}`);
-        }
-    }, checkInterval);
-}
-
-// Handle the /start command to launch the bot
-bot.command('start', (ctx) => {
-    ctx.reply('Welcome! Use /deposit to begin the deposit process.');
-});
-
-// Handle the /deposit command for user deposit
-bot.command('deposit', async (ctx) => {
-    const wallet = generateWallet();
-    const userId = ctx.message.from.id;
-    const username = ctx.message.from.username;
-
-    ctx.reply(`Please enter the amount in USDT you'd like to deposit.`);
-
-    bot.on('text', async (ctx) => {
-        const userAmountUSDT = parseFloat(ctx.message.text);
-
-        if (isNaN(userAmountUSDT) || userAmountUSDT <= 0) {
-            return ctx.reply("Invalid amount. Please enter a valid number.");
-        }
-
-        try {
-            const usdtToSolPrice = await fetchUSDTToSOLPrice();
-            const requiredSOL = userAmountUSDT / usdtToSolPrice;
-            const requiredLamports = Math.floor(requiredSOL * 1e9);
-
-            ctx.reply(`To deposit ${userAmountUSDT} USDT, please send ${requiredSOL.toFixed(5)} SOL to the following wallet:\n\n${wallet.publicKey.toBase58()}`);
-            monitorDeposit(wallet, userId, username, requiredLamports);
-        } catch (error) {
-            ctx.reply("There was an error processing your request. Please try again.");
-        }
-    });
-});
-
-// Launch the bot
-bot.launch().then(() => {
-    console.log("Bot is running!");
-}).catch((err) => {
-    console.error("Error launching the bot:", err);
-    bot.telegram.sendMessage(ADMIN_USER_ID, `Error launching the bot: ${err.message}`);
-});
+                wallet = generateWallet(); // Generate a new wallet after timeout
+                await bot.telegram.sendMessage(userId, `New wallet address for next deposit: ${wallet.publ
