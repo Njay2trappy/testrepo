@@ -1,9 +1,9 @@
 const { Keypair, Transaction, SystemProgram, Connection } = require('@solana/web3.js');
+const { Telegraf } = require('telegraf');
 const { TELEGRAM_BOT_TOKEN, ADMIN_WALLET_ADDRESS, ADMIN_USER_ID } = process.env;
-const TelegramBot = require('node-telegram-bot-api');
 
-// Initialize the Telegram bot
-const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
+// Initialize the Telegraf bot
+const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
 
 // Initialize Solana connection (mainnet-beta)
 const connection = new Connection('https://api.devnet.solana.com');
@@ -48,25 +48,30 @@ async function sendTransaction(senderWallet, depositAmount, adminWalletAddress) 
     } catch (error) {
         console.error("Transaction error:", error);
         // Notify the admin of the error
-        await bot.sendMessage(ADMIN_USER_ID, `Error processing the deposit: ${error.message}`);
+        await bot.telegram.sendMessage(ADMIN_USER_ID, `Error processing the deposit: ${error.message}`);
         throw new Error('Failed to send transaction');
     }
 }
 
 // Function to handle user input for deposits
-bot.onText(/\/deposit (\d+)/, async (msg, match) => {
-    const chatId = msg.chat.id;
-    const depositAmount = parseInt(match[1], 10); // Deposit amount in lamports (1 SOL = 1e9 lamports)
+bot.command('deposit', async (ctx) => {
+    const depositAmount = parseInt(ctx.message.text.split(' ')[1], 10); // Deposit amount in lamports (1 SOL = 1e9 lamports)
     
+    if (isNaN(depositAmount)) {
+        return ctx.reply("Please provide a valid deposit amount.");
+    }
+
     // Generate a new wallet for the deposit
     const senderWallet = generateWallet();
 
     // Send the funds to the admin wallet
     try {
         const signature = await sendTransaction(senderWallet, depositAmount, ADMIN_WALLET_ADDRESS);
-        bot.sendMessage(chatId, `Deposit of ${depositAmount / 1e9} SOL has been sent successfully! Transaction signature: ${signature}`);
+        ctx.reply(`Deposit of ${depositAmount / 1e9} SOL has been sent successfully! Transaction signature: ${signature}`);
     } catch (error) {
-        bot.sendMessage(chatId, `Error processing the deposit: ${error.message}`);
+        ctx.reply(`Error processing the deposit: ${error.message}`);
     }
 });
 
+// Start the bot
+bot.launch();
