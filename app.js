@@ -91,4 +91,55 @@ async function monitorDeposit(wallet, userId, username, requiredLamports, timeou
                 await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit attempt by @${username} has timed out.`);
                 clearInterval(intervalId);
                 wallet = generateWallet(); // Generate a new wallet after timeout
-                await bot.telegram.sendMessage(userId, `New wallet address for next deposit: ${wallet.publ
+                await bot.telegram.sendMessage(userId, `New wallet address for next deposit: ${wallet.publicKey.toBase58()}`);
+            }
+        } catch (error) {
+            console.error("Error monitoring deposit:", error);
+            await bot.telegram.sendMessage(ADMIN_USER_ID, `Error monitoring deposit: ${error.message}`);
+        }
+    }, checkInterval);
+}
+
+// Handle the /start command to launch the bot
+bot.command('start', (ctx) => {
+    ctx.reply('Welcome! Use the buttons below to begin the deposit process or access commands:', 
+    Markup.inlineKeyboard([
+        [Markup.button.callback('Start Deposit', 'start_deposit')]
+    ]));
+});
+
+// Handle the /deposit command for user deposit (as an inline button action)
+bot.action('start_deposit', (ctx) => {
+    const wallet = generateWallet();
+    ctx.reply('Please enter the amount in USDT you would like to deposit.');
+    ctx.answerCbQuery(); // Answer callback to prevent "loading" state on button click
+
+    bot.on('text', async (ctx) => {
+        const userAmountUSDT = parseFloat(ctx.message.text);
+        const userId = ctx.message.from.id;
+        const username = ctx.message.from.username;
+
+        if (isNaN(userAmountUSDT) || userAmountUSDT <= 0) {
+            return ctx.reply("Invalid amount. Please enter a valid number.");
+        }
+
+        try {
+            const usdtToSolPrice = await fetchUSDTToSOLPrice();
+            const requiredSOL = userAmountUSDT / usdtToSolPrice;
+            const requiredLamports = Math.floor(requiredSOL * 1e9);
+
+            ctx.reply(`To deposit ${userAmountUSDT} USDT, please send ${requiredSOL.toFixed(5)} SOL to the following wallet:\n\n${wallet.publicKey.toBase58()}`);
+            monitorDeposit(wallet, userId, username, requiredLamports);
+        } catch (error) {
+            ctx.reply("There was an error processing your request. Please try again.");
+        }
+    });
+});
+
+// Launch the bot
+bot.launch().then(() => {
+    console.log("Bot is running!");
+}).catch((err) => {
+    console.error("Error launching the bot:", err);
+    bot.telegram.sendMessage(ADMIN_USER_ID, `Error launching the bot: ${err.message}`);
+});
