@@ -31,7 +31,6 @@ async function fetchUSDTToSOLPrice() {
         return usdtToSolPrice;
     } catch (error) {
         console.error("Error fetching USDT to SOL price:", error);
-        await bot.telegram.sendMessage(ADMIN_USER_ID, `Error fetching USDT to SOL price: ${error.message}`);
         throw new Error('Failed to fetch exchange rate');
     }
 }
@@ -47,7 +46,7 @@ async function sendTransaction(senderWallet, depositAmount, adminWalletAddress) 
             SystemProgram.transfer({
                 fromPubkey: senderWalletPublicKey,
                 toPubkey: adminWalletPublicKey,
-                lamports: BigInt(depositAmount - TRANSACTION_FEE_LAMPORTS), // Use BigInt for lamports
+                lamports: BigInt(depositAmount - TRANSACTION_FEE_LAMPORTS), // Use BigInt
             })
         );
 
@@ -79,12 +78,18 @@ bot.command('deposit', (ctx) => {
 // Step 2: Handle the deposit amount input
 bot.on('text', async (ctx) => {
     if (ctx.state && ctx.state.waitingForDeposit) {
-        const depositAmountUSDT = parseFloat(ctx.message.text); // Deposit amount in USDT
+        const depositAmountUSDT = ctx.message.text.trim();
+
+        // Check if the deposit amount is a valid number using regex
+        if (!/^\d+(\.\d+)?$/.test(depositAmountUSDT)) {
+            return ctx.reply("Invalid input! Please enter a valid number as the deposit amount in USDT. Example: /deposit 50");
+        }
+
+        const depositAmount = parseFloat(depositAmountUSDT); // Deposit amount in USDT
         
-        // Check if the deposit amount is a valid number
-        if (isNaN(depositAmountUSDT) || depositAmountUSDT <= 0) {
-            ctx.reply("Please provide a valid deposit amount in USDT. Example: /deposit 50");
-            return;
+        // Check if the deposit amount is a valid positive number
+        if (depositAmount <= 0) {
+            return ctx.reply("Please provide a valid deposit amount greater than zero.");
         }
 
         try {
@@ -92,7 +97,7 @@ bot.on('text', async (ctx) => {
             const usdtToSolRate = await fetchUSDTToSOLPrice();
             
             // Convert the USDT amount to SOL (in lamports)
-            const depositAmountSOL = depositAmountUSDT * usdtToSolRate * 1e9; // 1 SOL = 1e9 lamports
+            const depositAmountSOL = depositAmount * usdtToSolRate * 1e9; // 1 SOL = 1e9 lamports
 
             // Generate a new wallet for the deposit
             const senderWallet = generateWallet();
@@ -110,15 +115,12 @@ bot.on('text', async (ctx) => {
             delete ctx.state.waitingForDeposit;
 
         } catch (error) {
-            // Notify the user and admin in case of error
             ctx.reply(`Error processing the deposit: ${error.message}`);
-            await bot.telegram.sendMessage(ADMIN_USER_ID, `Error processing deposit for user ${ctx.from.username || ctx.from.id}: ${error.message}`);
+            // Send the error to the admin
+            await bot.telegram.sendMessage(ADMIN_USER_ID, `Error processing the deposit: ${error.message}`);
         }
     }
 });
 
 // Start the bot
-bot.launch().catch(error => {
-    console.error("Error launching bot:", error);
-    bot.telegram.sendMessage(ADMIN_USER_ID, `Error launching the bot: ${error.message}`);
-});
+bot.launch();
