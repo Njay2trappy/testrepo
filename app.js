@@ -7,9 +7,8 @@ const axios = require('axios');
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
 const connection = new Connection('https://api.devnet.solana.com');
 
-const TRANSACTION_FEE_LAMPORTS = 5000;
-let adminWalletAddress; 
-let depositWallet; 
+let adminWalletAddress;
+let depositWallet;
 let requiredLamports;
 
 // Generate a new Solana wallet for deposit
@@ -32,60 +31,52 @@ async function fetchUSDTToSOLPrice() {
 
 // Start the bot with /start command
 bot.command('start', (ctx) => {
-    console.log("User started the bot:", ctx.from.username); // Debug log
-    ctx.reply('Welcome! Please set the admin wallet address to proceed.', 
-    Markup.inlineKeyboard([ [Markup.button.callback('Set Admin Wallet', 'set_admin_wallet')] ]));
+    console.log("User started the bot:", ctx.from.username);
+    ctx.reply('Welcome! Use /setadmin to set up the admin wallet or /deposit to make a deposit.', 
+    Markup.inlineKeyboard([ 
+        [Markup.button.callback('Set Admin Wallet', 'set_admin')],
+        [Markup.button.callback('Make a Deposit', 'make_deposit')]
+    ]));
 });
 
-// Set Admin Wallet Address with Debugging
-bot.action('set_admin_wallet', (ctx) => {
+// Set Admin Wallet
+bot.action('set_admin', (ctx) => {
     ctx.reply('Please enter the admin wallet address:');
-    bot.on('text', async (ctx) => {
-        const inputAddress = ctx.message.text.trim();
-        console.log("Received admin wallet address input:", inputAddress); // Debug log
+    bot.once('text', async (ctx) => {
         try {
-            adminWalletAddress = new PublicKey(inputAddress);
-            console.log("Admin wallet address after conversion:", adminWalletAddress.toBase58()); // Debug log
+            adminWalletAddress = new PublicKey(ctx.message.text.trim());
             ctx.reply(`Admin wallet address set: ${adminWalletAddress.toBase58()}`);
-            ctx.reply('Please enter the deposit amount in USDT:');
         } catch (error) {
-            console.error("Error in setting admin wallet address:", error); // Debug log
-            ctx.reply('Invalid wallet address. Please re-enter a valid Solana address.');
+            ctx.reply('Invalid wallet address. Please use /setadmin to try again.');
         }
     });
 });
 
-// Get deposit amount in USDT, then calculate required SOL with Debugging
-bot.on('text', async (ctx) => {
+// Make Deposit
+bot.action('make_deposit', (ctx) => {
     if (!adminWalletAddress) {
-        console.log("Admin wallet address not set yet."); // Debug log
-        return ctx.reply("Please set the admin wallet address first.");
+        return ctx.reply('Please set the admin wallet first with /setadmin.');
     }
-    
-    const userAmountUSDT = parseFloat(ctx.message.text);
-    console.log("User entered amount:", userAmountUSDT); // Debug log
-    const userId = ctx.message.from.id;
-    const username = ctx.message.from.username;
+    ctx.reply('Please enter the deposit amount in USDT:');
+    bot.once('text', async (ctx) => {
+        const userAmountUSDT = parseFloat(ctx.message.text);
+        if (isNaN(userAmountUSDT) || userAmountUSDT <= 0) {
+            return ctx.reply("Invalid amount. Please enter a valid USDT deposit amount.");
+        }
+        try {
+            const usdtToSolPrice = await fetchUSDTToSOLPrice();
+            const requiredSOL = userAmountUSDT / usdtToSolPrice;
+            requiredLamports = Math.floor(requiredSOL * 1e9);
 
-    if (isNaN(userAmountUSDT) || userAmountUSDT <= 0) {
-        return ctx.reply("Invalid amount. Please enter a valid USDT deposit amount.");
-    }
-
-    try {
-        const usdtToSolPrice = await fetchUSDTToSOLPrice();
-        const requiredSOL = userAmountUSDT / usdtToSolPrice;
-        requiredLamports = Math.floor(requiredSOL * 1e9);
-
-        // Generate deposit wallet
-        depositWallet = generateWallet();
-        ctx.reply(`Please deposit ${requiredSOL.toFixed(5)} SOL to this address:\n\n${depositWallet.publicKey.toBase58()}`,
-            Markup.inlineKeyboard([Markup.button.callback('Cancel Deposit', 'cancel_deposit')]));
-
-        // Start monitoring for deposit
-        monitorDeposit(depositWallet, userId, username, requiredLamports);
-    } catch (error) {
-        ctx.reply("There was an error processing your request. Please try again.");
-    }
+            depositWallet = generateWallet();
+            ctx.reply(`Please deposit ${requiredSOL.toFixed(5)} SOL to this address:\n\n${depositWallet.publicKey.toBase58()}`,
+                Markup.inlineKeyboard([Markup.button.callback('Cancel Deposit', 'cancel_deposit')]));
+            
+            monitorDeposit(depositWallet, ctx.message.from.id, ctx.message.from.username, requiredLamports);
+        } catch (error) {
+            ctx.reply("There was an error processing your request. Please try again.");
+        }
+    });
 });
 
 // Monitor deposit and transfer funds to admin wallet after confirmation
@@ -98,7 +89,6 @@ async function monitorDeposit(wallet, userId, username, requiredLamports, timeou
         attempts++;
         try {
             const balance = await connection.getBalance(wallet.publicKey);
-            console.log("Current balance for deposit wallet:", balance); // Debug log
             if (balance >= requiredLamports) {
                 await bot.telegram.sendMessage(userId, `Deposit confirmed! ${balance / 1e9} SOL received.`);
                 await bot.telegram.sendMessage(ADMIN_USER_ID, `User @${username} deposited ${balance / 1e9} SOL.`);
@@ -113,12 +103,12 @@ async function monitorDeposit(wallet, userId, username, requiredLamports, timeou
                 depositWallet = generateWallet(); // Generate new wallet for next deposit
             }
         } catch (error) {
-            console.error("Error monitoring deposit:", error); // Debug log
+            console.error("Error monitoring deposit:", error);
         }
     }, checkInterval);
 }
 
-// Handle /cancel_deposit command to cancel deposit
+// Cancel Deposit
 bot.action('cancel_deposit', (ctx) => {
     ctx.reply("Your deposit process has been canceled.");
     depositWallet = generateWallet(); // Generate new wallet after cancellation
@@ -127,8 +117,7 @@ bot.action('cancel_deposit', (ctx) => {
 // Transfer SOL from deposit wallet to admin wallet
 async function transferToAdminWallet(senderWallet, amountLamports) {
     try {
-        const amountAfterFee = amountLamports - TRANSACTION_FEE_LAMPORTS;
-        console.log("Transferring amount after fee:", amountAfterFee); // Debug log
+        const amountAfterFee = amountLamports - 5000; // Assuming a transaction fee of 5000 lamports
         if (amountAfterFee <= 0) throw new Error("Insufficient funds to cover transaction fee.");
 
         const transaction = new Transaction().add(
@@ -148,7 +137,7 @@ async function transferToAdminWallet(senderWallet, amountLamports) {
     }
 }
 
-// Launch the bot with added error logging
+// Launch the bot
 bot.launch().then(() => {
     console.log("Bot is running!");
 }).catch((err) => {
