@@ -8,7 +8,7 @@ const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
 const connection = new Connection('https://api.devnet.solana.com');
 
 const TRANSACTION_FEE_LAMPORTS = 5000;
-let adminWalletAddress;
+let adminWalletAddress; // Now will be set dynamically
 let depositWallet; // Stores generated deposit wallet
 let requiredLamports;
 
@@ -19,20 +19,12 @@ function generateWallet() {
 
 // Fetch USDT to SOL conversion rate from CoinGecko
 async function fetchUSDTToSOLPrice() {
-    try {
-        const response = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
-        const usdtToSolPrice = response.data['solana']?.usd;
-        if (!usdtToSolPrice) throw new Error('Unable to fetch the USDT to SOL price');
-        return usdtToSolPrice;
-    } catch (error) {
-        console.error("Error fetching USDT to SOL price:", error);
-        throw new Error('Failed to fetch exchange rate');
-    }
+    // ... (keep the existing function)
 }
 
 // Start the bot with /start command
 bot.command('start', (ctx) => {
-    ctx.reply('Welcome! To start, set the admin wallet address.', 
+    ctx.reply('Welcome! Please set the admin wallet address to proceed.', 
     Markup.inlineKeyboard([ [Markup.button.callback('Set Admin Wallet', 'set_admin_wallet')] ]));
 });
 
@@ -53,6 +45,10 @@ bot.action('set_admin_wallet', (ctx) => {
 
 // Get deposit amount in USDT, then calculate required SOL
 bot.on('text', async (ctx) => {
+    if (!adminWalletAddress) {
+        return ctx.reply("Please set the admin wallet address first.");
+    }
+    
     const userAmountUSDT = parseFloat(ctx.message.text);
     const userId = ctx.message.from.id;
     const username = ctx.message.from.username;
@@ -80,31 +76,7 @@ bot.on('text', async (ctx) => {
 
 // Monitor deposit and transfer funds to admin wallet after confirmation
 async function monitorDeposit(wallet, userId, username, requiredLamports, timeoutDuration = 900000) {
-    const checkInterval = 15000;
-    const maxAttempts = timeoutDuration / checkInterval;
-    let attempts = 0;
-
-    const intervalId = setInterval(async () => {
-        attempts++;
-        try {
-            const balance = await connection.getBalance(wallet.publicKey);
-            if (balance >= requiredLamports) {
-                await bot.telegram.sendMessage(userId, `Deposit confirmed! ${balance / 1e9} SOL received.`);
-                await bot.telegram.sendMessage(ADMIN_USER_ID, `User @${username} deposited ${balance / 1e9} SOL.`);
-
-                const signature = await transferToAdminWallet(wallet, balance);
-                await bot.telegram.sendMessage(userId, `Deposit transferred. Transaction ID: ${signature}`);
-                clearInterval(intervalId);
-                depositWallet = generateWallet(); // Generate new wallet for next deposit
-            } else if (attempts >= maxAttempts) {
-                await bot.telegram.sendMessage(userId, "Deposit timed out. No funds detected within the allowed time.");
-                clearInterval(intervalId);
-                depositWallet = generateWallet(); // Generate new wallet for next deposit
-            }
-        } catch (error) {
-            console.error("Error monitoring deposit:", error);
-        }
-    }, checkInterval);
+    // ... (keep the existing function but ensure adminWalletAddress is used)
 }
 
 // Handle /cancel_deposit command to cancel deposit
@@ -115,25 +87,7 @@ bot.action('cancel_deposit', (ctx) => {
 
 // Transfer SOL from deposit wallet to admin wallet
 async function transferToAdminWallet(senderWallet, amountLamports) {
-    try {
-        const amountAfterFee = amountLamports - TRANSACTION_FEE_LAMPORTS;
-        if (amountAfterFee <= 0) throw new Error("Insufficient funds to cover transaction fee.");
-
-        const transaction = new Transaction().add(
-            SystemProgram.transfer({
-                fromPubkey: senderWallet.publicKey,
-                toPubkey: adminWalletAddress,
-                lamports: amountAfterFee,
-            })
-        );
-
-        const signature = await connection.sendTransaction(transaction, [senderWallet]);
-        await connection.confirmTransaction(signature);
-        return signature;
-    } catch (error) {
-        console.error("Error transferring to admin wallet:", error);
-        throw error;
-    }
+    // ... (use adminWalletAddress here)
 }
 
 // Launch the bot
