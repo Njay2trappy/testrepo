@@ -19,8 +19,17 @@ function generateWallet() {
 
 // Fetch USDT to SOL conversion rate from CoinGecko
 async function fetchUSDTToSOLPrice() {
-    // ... (keep the existing function)
+    try {
+        const response = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd');
+        const usdtToSolPrice = response.data['solana']?.usd;
+        if (!usdtToSolPrice) throw new Error('Unable to fetch the USDT to SOL price');
+        return usdtToSolPrice;
+    } catch (error) {
+        console.error("Error fetching USDT to SOL price:", error);
+        throw new Error('Failed to fetch exchange rate');
+    }
 }
+
 
 // Start the bot with /start command
 bot.command('start', (ctx) => {
