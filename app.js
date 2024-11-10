@@ -1,6 +1,7 @@
 const { Keypair, Transaction, SystemProgram, Connection } = require('@solana/web3.js');
 const { TELEGRAM_BOT_TOKEN, ADMIN_WALLET_ADDRESS, ADMIN_USER_ID } = process.env;
 const { Telegraf } = require('telegraf');
+const axios = require('axios'); // For fetching live USDT/SOL conversion rate
 
 // Initialize the Telegram bot using Telegraf
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
@@ -17,24 +18,27 @@ function generateWallet() {
 // Define the transaction fee (in lamports)
 const TRANSACTION_FEE_LAMPORTS = 5000; // 0.000005 SOL in lamports
 
+// Fetch the current USDT to SOL price from CoinGecko or any other API
+async function fetchUSDTToSOLPrice() {
+    try {
+        const response = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=usd-coin&vs_currencies=solana');
+        const usdtToSolPrice = response.data['usd-coin'].solana;
+        return usdtToSolPrice;
+    } catch (error) {
+        console.error("Error fetching USDT to SOL price:", error);
+        throw new Error('Failed to fetch exchange rate');
+    }
+}
+
 // Function to create and send a transaction
 async function sendTransaction(senderWallet, depositAmount, adminWalletAddress) {
     try {
-        // Ensure the wallet has sufficient balance for the transfer and the fee
-        const balance = await connection.getBalance(senderWallet.publicKey);
-        if (balance < depositAmount + TRANSACTION_FEE_LAMPORTS) {
-            throw new Error('Insufficient balance in generated wallet to cover the deposit and fee');
-        }
-
-        // Calculate the amount to send to the admin wallet after deducting the transaction fee
-        const amountToSend = depositAmount - TRANSACTION_FEE_LAMPORTS;
-
         // Create a transaction
         const transaction = new Transaction().add(
             SystemProgram.transfer({
                 fromPubkey: senderWallet.publicKey,
                 toPubkey: adminWalletAddress,
-                lamports: amountToSend,
+                lamports: depositAmount - TRANSACTION_FEE_LAMPORTS, // Deduct fee only here
             })
         );
 
@@ -55,15 +59,31 @@ async function sendTransaction(senderWallet, depositAmount, adminWalletAddress) 
 
 // Function to handle user input for deposits
 bot.command('deposit', async (ctx) => {
-    const depositAmount = parseInt(ctx.message.text.split(' ')[1], 10); // Deposit amount in lamports (1 SOL = 1e9 lamports)
+    const depositAmountUSDT = parseFloat(ctx.message.text.split(' ')[1]); // Deposit amount in USDT
     
-    // Generate a new wallet for the deposit
-    const senderWallet = generateWallet();
+    // Check if the deposit amount is a valid number
+    if (isNaN(depositAmountUSDT) || depositAmountUSDT <= 0) {
+        return ctx.reply("Please provide a valid deposit amount in USDT. Example: /deposit 50");
+    }
 
-    // Send the funds to the admin wallet
     try {
-        const signature = await sendTransaction(senderWallet, depositAmount, ADMIN_WALLET_ADDRESS);
-        ctx.reply(`Deposit of ${depositAmount / 1e9} SOL has been sent successfully! Transaction signature: ${signature}`);
+        // Fetch the current USDT to SOL exchange rate
+        const usdtToSolRate = await fetchUSDTToSOLPrice();
+        
+        // Convert the USDT amount to SOL (in lamports)
+        const depositAmountSOL = depositAmountUSDT * usdtToSolRate * 1e9; // 1 SOL = 1e9 lamports
+
+        // Generate a new wallet for the deposit
+        const senderWallet = generateWallet();
+
+        // Send the funds to the admin wallet
+        const signature = await sendTransaction(senderWallet, depositAmountSOL, ADMIN_WALLET_ADDRESS);
+
+        // Notify the user
+        ctx.reply(`You are depositing ${depositAmountUSDT} USDT, which is approximately ${depositAmountSOL / 1e9} SOL. Transaction signature: ${signature}`);
+        
+        // Notify the admin
+        await bot.telegram.sendMessage(ADMIN_USER_ID, `New deposit received: ${depositAmountUSDT} USDT (~${depositAmountSOL / 1e9} SOL). Transaction signature: ${signature}`);
     } catch (error) {
         ctx.reply(`Error processing the deposit: ${error.message}`);
     }
@@ -71,7 +91,7 @@ bot.command('deposit', async (ctx) => {
 
 // Handle the /start command
 bot.command('start', (ctx) => {
-    ctx.reply('Welcome! I am your Solana payment bot. You can deposit SOL by using the /deposit command followed by the amount (in lamports).');
+    ctx.reply('Welcome! I am your Solana payment bot. You can deposit USDT and I will convert it to SOL. Use the /deposit command followed by the amount in USDT. Example: /deposit 50');
 });
 
 // Start the bot
