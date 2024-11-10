@@ -83,15 +83,11 @@ async function monitorDeposit(wallet, userId, username, requiredLamports, timeou
                 await bot.telegram.sendMessage(userId, `Your deposit has been transferred. Transaction ID: ${signature}`);
                 await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit from @${username} transferred to admin wallet. Transaction ID: ${signature}`);
 
-                clearInterval(intervalId);
-                wallet = generateWallet(); // Generate a new wallet after the transaction
-                await bot.telegram.sendMessage(userId, `New wallet address for next deposit: ${wallet.publicKey.toBase58()}`);
+                clearInterval(intervalId); // Stop monitoring after successful deposit
             } else if (attempts >= maxAttempts) {
                 await bot.telegram.sendMessage(userId, "Deposit timed out. No funds detected within the allowed time.");
                 await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit attempt by @${username} has timed out.`);
-                clearInterval(intervalId);
-                wallet = generateWallet(); // Generate a new wallet after timeout
-                await bot.telegram.sendMessage(userId, `New wallet address for next deposit: ${wallet.publicKey.toBase58()}`);
+                clearInterval(intervalId); // Stop monitoring after timeout
             }
         } catch (error) {
             console.error("Error monitoring deposit:", error);
@@ -110,7 +106,7 @@ bot.command('start', (ctx) => {
 
 // Handle the /deposit command for user deposit (as an inline button action)
 bot.action('start_deposit', (ctx) => {
-    const wallet = generateWallet();
+    const wallet = generateWallet(); // New wallet is created here for each deposit attempt
     ctx.reply('Please enter the amount in USDT you would like to deposit.');
     ctx.answerCbQuery(); // Answer callback to prevent "loading" state on button click
 
