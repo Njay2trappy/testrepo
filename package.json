@@ -1,17 +1,13 @@
 {
   "name": "solana-payment-bot",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node app.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
-    "@solana/web3.js": "^1.95.4",
-    "dotenv": "^16.4.5",
-    "telegraf": "^4.16.3"
+    "@solana/web3.js": "^1.30.0",
+    "telegraf": "^4.5.0",
+    "dotenv": "^10.0.0"
   }
 }
