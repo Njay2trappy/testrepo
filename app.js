@@ -12,14 +12,13 @@ const connection = new Connection('https://api.devnet.solana.com');
 
 // Function to generate a random Solana wallet (Keypair)
 function generateWallet() {
-    const wallet = Keypair.generate();
-    return wallet;
+    return Keypair.generate();
 }
 
 // Define the transaction fee (in lamports)
 const TRANSACTION_FEE_LAMPORTS = 5000; // 0.000005 SOL in lamports
 
-// Fetch the current USDT to SOL price from CoinGecko or any other API
+// Fetch the current USDT to SOL price from CoinGecko
 async function fetchUSDTToSOLPrice() {
     try {
         const response = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=usd-coin&vs_currencies=solana');
@@ -32,51 +31,81 @@ async function fetchUSDTToSOLPrice() {
         return usdtToSolPrice;
     } catch (error) {
         console.error("Error fetching USDT to SOL price:", error);
-        // Send error message to the admin
         await bot.telegram.sendMessage(ADMIN_USER_ID, `Error fetching USDT to SOL price: ${error.message}`);
         throw new Error('Failed to fetch exchange rate');
     }
 }
 
-// Function to create and send a transaction
-async function sendTransaction(senderWallet, depositAmount, adminWalletAddress) {
-    try {
-        const adminWalletPublicKey = new PublicKey(adminWalletAddress); // Convert to PublicKey
-        const senderWalletPublicKey = senderWallet.publicKey;
+// Function to monitor the wallet for deposit
+async function monitorDeposit(wallet, userId, username, requiredLamports) {
+    const checkInterval = 15000; // 15 seconds
+    const maxAttempts = 60; // 15 minutes (60 * 15 sec = 900 sec = 15 min)
+    let attempts = 0;
 
-        // Create a transaction
-        const transaction = new Transaction().add(
-            SystemProgram.transfer({
-                fromPubkey: senderWalletPublicKey,
-                toPubkey: adminWalletPublicKey,
-                lamports: BigInt(depositAmount - TRANSACTION_FEE_LAMPORTS), // Use BigInt
-            })
-        );
-
-        // Sign the transaction using the sender's wallet
-        const signature = await connection.sendTransaction(transaction, [senderWallet]);
-
-        // Wait for transaction confirmation
-        await connection.confirmTransaction(signature);
-
-        return signature; // Return the signature for tracking
-    } catch (error) {
-        console.error("Transaction error:", error);
-        // Send error message to the admin
-        await bot.telegram.sendMessage(ADMIN_USER_ID, `Transaction error: ${error.message}`);
-        throw new Error('Failed to send transaction');
-    }
+    const intervalId = setInterval(async () => {
+        attempts++;
+        try {
+            const balance = await connection.getBalance(wallet.publicKey);
+            if (balance >= requiredLamports) {
+                await bot.telegram.sendMessage(userId, `Deposit confirmed! ${balance} lamports have been received.`);
+                await bot.telegram.sendMessage(ADMIN_USER_ID, `User @${username} successfully deposited ${balance} lamports.`);
+                clearInterval(intervalId);
+            } else if (attempts >= maxAttempts) {
+                await bot.telegram.sendMessage(userId, "Deposit timed out. No funds were detected within the allowed time.");
+                await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit attempt by @${username} has timed out. No funds detected.`);
+                clearInterval(intervalId);
+            }
+        } catch (error) {
+            console.error("Error monitoring deposit:", error);
+        }
+    }, checkInterval);
 }
 
-// Handle the /start command to launch the bot
+// Handle the /start command
 bot.command('start', (ctx) => {
     ctx.reply('Welcome! I am your Solana payment bot. You can deposit USDT and I will convert it to SOL. Use the /deposit command to start the deposit process.');
 });
 
-// Launch the bot to listen for incoming commands
+// Handle the /deposit command
+bot.command('deposit', async (ctx) => {
+    try {
+        ctx.reply("Please enter the amount you wish to deposit in USDT:");
+        
+        bot.on('text', async (messageCtx) => {
+            const usdtAmount = parseFloat(messageCtx.message.text);
+            
+            if (isNaN(usdtAmount) || usdtAmount <= 0) {
+                messageCtx.reply("Invalid amount. Please enter a valid number greater than zero.");
+                return;
+            }
+
+            const usdtToSolRate = await fetchUSDTToSOLPrice();
+            const requiredSol = usdtAmount * usdtToSolRate;
+            const requiredLamports = Math.ceil(requiredSol * 1e9); // Convert SOL to lamports
+            
+            const depositWallet = generateWallet();
+            const depositAddress = depositWallet.publicKey.toString();
+            
+            messageCtx.reply(`Your unique deposit address is:\n\n${depositAddress}\n\nPlease send approximately ${requiredSol.toFixed(6)} SOL to this address (equivalent to ${usdtAmount} USDT).\n\nNote: Only send SOL to this address; other tokens will be lost.`);
+            
+            await bot.telegram.sendMessage(
+                ADMIN_USER_ID, 
+                `New deposit request by @${ctx.message.from.username} for ${usdtAmount} USDT (${requiredSol.toFixed(6)} SOL) to wallet ${depositAddress}`
+            );
+
+            monitorDeposit(depositWallet, ctx.message.from.id, ctx.message.from.username, requiredLamports);
+        });
+        
+    } catch (error) {
+        console.error("Error in /deposit command:", error);
+        ctx.reply("There was an error starting the deposit process. Please try again later.");
+    }
+});
+
+// Launch the bot
 bot.launch().then(() => {
     console.log("Bot is up and running!");
 }).catch((err) => {
-    console.error("Error launching the bot:", err);
-    bot.telegram.sendMessage(ADMIN_USER_ID, `Error launching the bot: ${err.message}`);
+    console.error("Error launching the bot:", err.message);
+    bot.telegram.sendMessage(ADMIN_USER_ID, `Error launching the bot: ${err.message}`).catch(console.error);
 });
