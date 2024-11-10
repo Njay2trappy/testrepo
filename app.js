@@ -31,51 +31,39 @@ async function fetchUSDTToSOLPrice() {
 
 // Start the bot with /start command
 bot.command('start', (ctx) => {
-    console.log("User started the bot:", ctx.from.username);
-    ctx.reply('Welcome! Use /setadmin to set up the admin wallet or /deposit to make a deposit.', 
+    ctx.reply('Welcome! Use /setadmin to set up the admin wallet.', 
     Markup.inlineKeyboard([ 
-        [Markup.button.callback('Set Admin Wallet', 'set_admin')],
-        [Markup.button.callback('Make a Deposit', 'make_deposit')]
+        [Markup.button.callback('Set Admin Wallet', 'set_admin')]
     ]));
 });
 
-// Set Admin Wallet
+// Set Admin Wallet and immediately prompt for deposit
 bot.action('set_admin', (ctx) => {
     ctx.reply('Please enter the admin wallet address:');
-    bot.once('text', async (ctx) => {
-        try {
-            adminWalletAddress = new PublicKey(ctx.message.text.trim());
-            ctx.reply(`Admin wallet address set: ${adminWalletAddress.toBase58()}`);
-        } catch (error) {
-            ctx.reply('Invalid wallet address. Please use /setadmin to try again.');
-        }
-    });
-});
+    bot.once('text', (ctx) => {
+        adminWalletAddress = ctx.message.text.trim();
+        console.log("Admin wallet set to:", adminWalletAddress); // Debug log
+        ctx.reply(`Admin wallet address set: ${adminWalletAddress}`);
+        ctx.reply('Now, please enter the deposit amount in USDT:');
+        bot.once('text', async (ctx) => {
+            const userAmountUSDT = parseFloat(ctx.message.text);
+            if (isNaN(userAmountUSDT) || userAmountUSDT <= 0) {
+                return ctx.reply("Invalid amount. Please enter a valid USDT deposit amount.");
+            }
+            try {
+                const usdtToSolPrice = await fetchUSDTToSOLPrice();
+                const requiredSOL = userAmountUSDT / usdtToSolPrice;
+                requiredLamports = Math.floor(requiredSOL * 1e9);
 
-// Make Deposit
-bot.action('make_deposit', (ctx) => {
-    if (!adminWalletAddress) {
-        return ctx.reply('Please set the admin wallet first with /setadmin.');
-    }
-    ctx.reply('Please enter the deposit amount in USDT:');
-    bot.once('text', async (ctx) => {
-        const userAmountUSDT = parseFloat(ctx.message.text);
-        if (isNaN(userAmountUSDT) || userAmountUSDT <= 0) {
-            return ctx.reply("Invalid amount. Please enter a valid USDT deposit amount.");
-        }
-        try {
-            const usdtToSolPrice = await fetchUSDTToSOLPrice();
-            const requiredSOL = userAmountUSDT / usdtToSolPrice;
-            requiredLamports = Math.floor(requiredSOL * 1e9);
-
-            depositWallet = generateWallet();
-            ctx.reply(`Please deposit ${requiredSOL.toFixed(5)} SOL to this address:\n\n${depositWallet.publicKey.toBase58()}`,
-                Markup.inlineKeyboard([Markup.button.callback('Cancel Deposit', 'cancel_deposit')]));
-            
-            monitorDeposit(depositWallet, ctx.message.from.id, ctx.message.from.username, requiredLamports);
-        } catch (error) {
-            ctx.reply("There was an error processing your request. Please try again.");
-        }
+                depositWallet = generateWallet();
+                ctx.reply(`Please deposit ${requiredSOL.toFixed(5)} SOL to this address:\n\n${depositWallet.publicKey.toBase58()}`,
+                    Markup.inlineKeyboard([Markup.button.callback('Cancel Deposit', 'cancel_deposit')]));
+                
+                monitorDeposit(depositWallet, ctx.message.from.id, ctx.message.from.username, requiredLamports);
+            } catch (error) {
+                ctx.reply("There was an error processing your request. Please try again.");
+            }
+        });
     });
 });
 
@@ -123,7 +111,7 @@ async function transferToAdminWallet(senderWallet, amountLamports) {
         const transaction = new Transaction().add(
             SystemProgram.transfer({
                 fromPubkey: senderWallet.publicKey,
-                toPubkey: adminWalletAddress,
+                toPubkey: new PublicKey(adminWalletAddress), // Convert to PublicKey here
                 lamports: amountAfterFee,
             })
         );
