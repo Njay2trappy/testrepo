@@ -1,8 +1,8 @@
 const { Keypair, Transaction, SystemProgram, Connection } = require('@solana/web3.js');
-const { Telegraf } = require('telegraf');
 const { TELEGRAM_BOT_TOKEN, ADMIN_WALLET_ADDRESS, ADMIN_USER_ID } = process.env;
+const { Telegraf } = require('telegraf');
 
-// Initialize the Telegraf bot
+// Initialize the Telegram bot using Telegraf
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
 
 // Initialize Solana connection (mainnet-beta)
@@ -57,10 +57,6 @@ async function sendTransaction(senderWallet, depositAmount, adminWalletAddress) 
 bot.command('deposit', async (ctx) => {
     const depositAmount = parseInt(ctx.message.text.split(' ')[1], 10); // Deposit amount in lamports (1 SOL = 1e9 lamports)
     
-    if (isNaN(depositAmount)) {
-        return ctx.reply("Please provide a valid deposit amount.");
-    }
-
     // Generate a new wallet for the deposit
     const senderWallet = generateWallet();
 
@@ -71,6 +67,11 @@ bot.command('deposit', async (ctx) => {
     } catch (error) {
         ctx.reply(`Error processing the deposit: ${error.message}`);
     }
+});
+
+// Handle the /start command
+bot.command('start', (ctx) => {
+    ctx.reply('Welcome! I am your Solana payment bot. You can deposit SOL by using the /deposit command followed by the amount (in lamports).');
 });
 
 // Start the bot
