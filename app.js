@@ -1,7 +1,7 @@
-const { Keypair, Transaction, SystemProgram, Connection } = require('@solana/web3.js');
+const { Keypair, Transaction, SystemProgram, Connection, PublicKey } = require('@solana/web3.js');
 const { TELEGRAM_BOT_TOKEN, ADMIN_WALLET_ADDRESS, ADMIN_USER_ID } = process.env;
 const { Telegraf } = require('telegraf');
-const axios = require('axios'); // For fetching live USDT/SOL conversion rate
+const axios = require('axios');
 
 // Initialize the Telegram bot using Telegraf
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
@@ -22,7 +22,12 @@ const TRANSACTION_FEE_LAMPORTS = 5000; // 0.000005 SOL in lamports
 async function fetchUSDTToSOLPrice() {
     try {
         const response = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=usd-coin&vs_currencies=solana');
-        const usdtToSolPrice = response.data['usd-coin'].solana;
+        const usdtToSolPrice = response.data['usd-coin']?.solana;
+        
+        if (!usdtToSolPrice) {
+            throw new Error('Unable to fetch the USDT to SOL price');
+        }
+        
         return usdtToSolPrice;
     } catch (error) {
         console.error("Error fetching USDT to SOL price:", error);
@@ -33,12 +38,15 @@ async function fetchUSDTToSOLPrice() {
 // Function to create and send a transaction
 async function sendTransaction(senderWallet, depositAmount, adminWalletAddress) {
     try {
+        const adminWalletPublicKey = new PublicKey(adminWalletAddress); // Convert to PublicKey
+        const senderWalletPublicKey = senderWallet.publicKey;
+
         // Create a transaction
         const transaction = new Transaction().add(
             SystemProgram.transfer({
-                fromPubkey: senderWallet.publicKey,
-                toPubkey: adminWalletAddress,
-                lamports: depositAmount - TRANSACTION_FEE_LAMPORTS, // Deduct fee only here
+                fromPubkey: senderWalletPublicKey,
+                toPubkey: adminWalletPublicKey,
+                lamports: BigInt(depositAmount - TRANSACTION_FEE_LAMPORTS), // Use BigInt
             })
         );
 
@@ -51,7 +59,6 @@ async function sendTransaction(senderWallet, depositAmount, adminWalletAddress) 
         return signature; // Return the signature for tracking
     } catch (error) {
         console.error("Transaction error:", error);
-        // Notify the admin of the error
         await bot.telegram.sendMessage(ADMIN_USER_ID, `Error processing the deposit: ${error.message}`);
         throw new Error('Failed to send transaction');
     }
@@ -65,13 +72,12 @@ bot.command('start', (ctx) => {
 // Step 1: Handle the /deposit command (Prompt for deposit amount)
 bot.command('deposit', (ctx) => {
     ctx.reply('Please enter the deposit amount in USDT. Example: 50');
-    // Save the user's ID and mark that they're in the deposit process
-    ctx.session = { waitingForDeposit: true };
+    ctx.state.waitingForDeposit = true;  // Use state instead of session
 });
 
 // Step 2: Handle the deposit amount input
 bot.on('text', async (ctx) => {
-    if (ctx.session && ctx.session.waitingForDeposit) {
+    if (ctx.state && ctx.state.waitingForDeposit) {
         const depositAmountUSDT = parseFloat(ctx.message.text); // Deposit amount in USDT
         
         // Check if the deposit amount is a valid number
@@ -98,8 +104,8 @@ bot.on('text', async (ctx) => {
             // Notify the admin
             await bot.telegram.sendMessage(ADMIN_USER_ID, `New deposit received: ${depositAmountUSDT} USDT (~${depositAmountSOL / 1e9} SOL). Transaction signature: ${signature}`);
 
-            // Clear session after processing the deposit
-            delete ctx.session.waitingForDeposit;
+            // Clear state after processing the deposit
+            delete ctx.state.waitingForDeposit;
 
         } catch (error) {
             ctx.reply(`Error processing the deposit: ${error.message}`);
