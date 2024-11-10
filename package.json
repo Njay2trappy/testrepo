@@ -1,6 +1,6 @@
 {
   "name": "solana-payment-bot",
-  "version": "1.2.0",
+  "version": "1.0.0",
   "description": "A Telegram bot for processing Solana payments",
   "main": "app.js",
   "scripts": {
