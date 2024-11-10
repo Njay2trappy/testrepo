@@ -1,16 +1,19 @@
 {
   "name": "solana-payment-bot",
   "version": "1.0.0",
-  "main": "app.js",
+  "description": "A Telegram bot for processing Solana payments",
+  "main": "index.js",
   "scripts": {
-    "start": "node app.js"
+    "start": "node index.js"
   },
   "dependencies": {
-    "express": "^4.17.1",
-    "telegraf": "^4.5.0",
-    "@solana/web3.js": "^1.30.0",
-    "dotenv": "^10.0.0",
-    "axios": "^1.3.0",
-    "punycode": "^2.1.1"
-  }
+    "@solana/web3.js": "^1.68.0",
+    "axios": "^1.4.0",
+    "telegraf": "^4.11.0"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "author": "JOHN DOE",
+  "license": "MIT"
 }
