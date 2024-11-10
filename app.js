@@ -31,6 +31,8 @@ async function fetchUSDTToSOLPrice() {
         return usdtToSolPrice;
     } catch (error) {
         console.error("Error fetching USDT to SOL price:", error);
+        // Send error message to the admin
+        await bot.telegram.sendMessage(ADMIN_USER_ID, `Error fetching USDT to SOL price: ${error.message}`);
         throw new Error('Failed to fetch exchange rate');
     }
 }
@@ -59,68 +61,12 @@ async function sendTransaction(senderWallet, depositAmount, adminWalletAddress) 
         return signature; // Return the signature for tracking
     } catch (error) {
         console.error("Transaction error:", error);
-        await bot.telegram.sendMessage(ADMIN_USER_ID, `Error processing the deposit: ${error.message}`);
+        // Send error message to the admin
+        await bot.telegram.sendMessage(ADMIN_USER_ID, `Transaction error: ${error.message}`);
         throw new Error('Failed to send transaction');
     }
 }
 
 // Handle the /start command
 bot.command('start', (ctx) => {
-    ctx.reply('Welcome! I am your Solana payment bot. You can deposit USDT and I will convert it to SOL. Use the /deposit command to start the deposit process.');
-});
-
-// Step 1: Handle the /deposit command (Prompt for deposit amount)
-bot.command('deposit', (ctx) => {
-    ctx.reply('Please enter the deposit amount in USDT. Example: 50');
-    ctx.state.waitingForDeposit = true;  // Use state instead of session
-});
-
-// Step 2: Handle the deposit amount input
-bot.on('text', async (ctx) => {
-    if (ctx.state && ctx.state.waitingForDeposit) {
-        const depositAmountUSDT = ctx.message.text.trim();
-
-        // Check if the deposit amount is a valid number using regex
-        if (!/^\d+(\.\d+)?$/.test(depositAmountUSDT)) {
-            return ctx.reply("Invalid input! Please enter a valid number as the deposit amount in USDT. Example: /deposit 50");
-        }
-
-        const depositAmount = parseFloat(depositAmountUSDT); // Deposit amount in USDT
-        
-        // Check if the deposit amount is a valid positive number
-        if (depositAmount <= 0) {
-            return ctx.reply("Please provide a valid deposit amount greater than zero.");
-        }
-
-        try {
-            // Fetch the current USDT to SOL exchange rate
-            const usdtToSolRate = await fetchUSDTToSOLPrice();
-            
-            // Convert the USDT amount to SOL (in lamports)
-            const depositAmountSOL = depositAmount * usdtToSolRate * 1e9; // 1 SOL = 1e9 lamports
-
-            // Generate a new wallet for the deposit
-            const senderWallet = generateWallet();
-
-            // Send the funds to the admin wallet
-            const signature = await sendTransaction(senderWallet, depositAmountSOL, ADMIN_WALLET_ADDRESS);
-
-            // Notify the user
-            ctx.reply(`You are depositing ${depositAmountUSDT} USDT, which is approximately ${depositAmountSOL / 1e9} SOL. Transaction signature: ${signature}`);
-            
-            // Notify the admin
-            await bot.telegram.sendMessage(ADMIN_USER_ID, `New deposit received: ${depositAmountUSDT} USDT (~${depositAmountSOL / 1e9} SOL). Transaction signature: ${signature}`);
-
-            // Clear state after processing the deposit
-            delete ctx.state.waitingForDeposit;
-
-        } catch (error) {
-            ctx.reply(`Error processing the deposit: ${error.message}`);
-            // Send the error to the admin
-            await bot.telegram.sendMessage(ADMIN_USER_ID, `Error processing the deposit: ${error.message}`);
-        }
-    }
-});
-
-// Start the bot
-bot.launch();
+    ctx.reply('Welcome! I am your Solana payment bot. You can
