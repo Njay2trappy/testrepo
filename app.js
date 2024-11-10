@@ -1,3 +1,4 @@
+require('dotenv').config();  // Load environment variables
 const { Keypair, Transaction, SystemProgram, Connection, PublicKey } = require('@solana/web3.js');
 const { TELEGRAM_BOT_TOKEN, ADMIN_WALLET_ADDRESS, ADMIN_USER_ID } = process.env;
 const { Telegraf } = require('telegraf');
@@ -67,7 +68,15 @@ async function sendTransaction(senderWallet, depositAmount, adminWalletAddress) 
     }
 }
 
-// Handle the /start command
+// Handle the /start command to launch the bot
 bot.command('start', (ctx) => {
     ctx.reply('Welcome! I am your Solana payment bot. You can deposit USDT and I will convert it to SOL. Use the /deposit command to start the deposit process.');
+});
+
+// Launch the bot to listen for incoming commands
+bot.launch().then(() => {
+    console.log("Bot is up and running!");
+}).catch((err) => {
+    console.error("Error launching the bot:", err);
+    bot.telegram.sendMessage(ADMIN_USER_ID, `Error launching the bot: ${err.message}`);
 });
