@@ -1,6 +1,6 @@
 require('dotenv').config(); // Load environment variables
 const { Keypair, Transaction, SystemProgram, Connection, PublicKey } = require('@solana/web3.js');
-const { TELEGRAM_BOT_TOKEN, ADMIN_USER_ID} = process.env;
+const { TELEGRAM_BOT_TOKEN, ADMIN_USER_ID } = process.env;
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 
@@ -13,8 +13,8 @@ const connection = new Connection('https://api.devnet.solana.com');
 // Define the transaction fee in lamports (5000 lamports = 0.000005 SOL)
 const TRANSACTION_FEE_LAMPORTS = 5000;
 
-// Store active transactions (keyed by user ID)
-let activeTransactions = {};
+// Store active deposits
+let activeDeposits = {};
 
 // Function to generate a random Solana wallet (Keypair)
 function generateWallet() {
@@ -34,14 +34,15 @@ async function fetchUSDTToSOLPrice() {
         return usdtToSolPrice;
     } catch (error) {
         console.error("Error fetching USDT to SOL price:", error);
-        await bot.telegram.sendMessage(process.env.ADMIN_USER_ID, `Error fetching USDT to SOL price: ${error.message}`);
+        await bot.telegram.sendMessage(ADMIN_USER_ID, `Error fetching USDT to SOL price: ${error.message}`);
         throw new Error('Failed to fetch exchange rate');
     }
 }
 
 // Transfer SOL from the user's wallet to the admin wallet, deducting the transaction fee
-async function transferToAdminWallet(senderWallet, amountLamports, adminWalletPublicKey) {
+async function transferToAdminWallet(senderWallet, adminWalletAddress, amountLamports) {
     try {
+        const adminWalletPublicKey = new PublicKey(adminWalletAddress);
         const amountAfterFee = amountLamports - TRANSACTION_FEE_LAMPORTS;
 
         if (amountAfterFee <= 0) {
@@ -62,20 +63,22 @@ async function transferToAdminWallet(senderWallet, amountLamports, adminWalletPu
         return signature;
     } catch (error) {
         console.error("Error transferring to admin wallet:", error);
+        await bot.telegram.sendMessage(ADMIN_USER_ID, `Error transferring to admin wallet: ${error.message}`);
         throw error;
     }
 }
 
-// Monitor the deposit and transfer after confirmation
-async function monitorDeposit(wallet, userId, username, requiredLamports, adminWalletPublicKey, timeoutDuration = 900000) { // 15 minutes
+// Monitor deposit and transfer upon confirmation
+async function monitorDeposit(wallet, userId, username, requiredLamports, adminWalletAddress, ctx) {
     const checkInterval = 15000; // 15 seconds
-    const maxAttempts = timeoutDuration / checkInterval; // Calculate based on timeoutDuration
+    const maxAttempts = 60; // 15 minutes
     let attempts = 0;
 
+    activeDeposits[userId] = true;
+
     const intervalId = setInterval(async () => {
-        if (activeTransactions[userId]?.cancelled) {
-            clearInterval(intervalId); // Stop monitoring if transaction is canceled
-            await bot.telegram.sendMessage(userId, "Deposit process has been cancelled.");
+        if (!activeDeposits[userId]) {
+            clearInterval(intervalId);
             return;
         }
 
@@ -83,119 +86,93 @@ async function monitorDeposit(wallet, userId, username, requiredLamports, adminW
         try {
             const balance = await connection.getBalance(wallet.publicKey);
             if (balance >= requiredLamports) {
-                await bot.telegram.sendMessage(userId, `Deposit confirmed! ${balance / 1e9} SOL received.`);
-                await bot.telegram.sendMessage(process.env.ADMIN_USER_ID, `User @${username} deposited ${balance / 1e9} SOL.`);
+                await ctx.reply(`Deposit confirmed! ${balance / 1e9} SOL received.`);
+                await bot.telegram.sendMessage(ADMIN_USER_ID, `User @${username} deposited ${balance / 1e9} SOL.`);
 
-                const signature = await transferToAdminWallet(wallet, balance, adminWalletPublicKey);
-                await bot.telegram.sendMessage(userId, `Your deposit has been transferred. Transaction ID: ${signature}`);
-                await bot.telegram.sendMessage(process.env.ADMIN_USER_ID, `Deposit from @${username} transferred to admin wallet. Transaction ID: ${signature}`);
+                const signature = await transferToAdminWallet(wallet, adminWalletAddress, balance);
+                await ctx.reply(`Your deposit has been transferred. Transaction ID: ${signature}`);
+                await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit from @${username} transferred to admin wallet. Transaction ID: ${signature}`);
 
-                clearInterval(intervalId); // Stop monitoring after successful deposit
-                await generateNewWalletAndNotify(userId); // Generate new wallet after transaction completion
+                clearInterval(intervalId);
+                delete activeDeposits[userId];
             } else if (attempts >= maxAttempts) {
-                await bot.telegram.sendMessage(userId, "Deposit timed out. No funds detected within the allowed time.");
-                await bot.telegram.sendMessage(process.env.ADMIN_USER_ID, `Deposit attempt by @${username} has timed out.`);
-                clearInterval(intervalId); // Stop monitoring after timeout
-                await generateNewWalletAndNotify(userId); // Generate new wallet after transaction timeout
+                await ctx.reply("Deposit timed out. No funds detected within the allowed time.");
+                await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit attempt by @${username} has timed out.`);
+                clearInterval(intervalId);
+                delete activeDeposits[userId];
             }
         } catch (error) {
             console.error("Error monitoring deposit:", error);
+            await bot.telegram.sendMessage(ADMIN_USER_ID, `Error monitoring deposit: ${error.message}`);
         }
     }, checkInterval);
-
-    // Store the active transaction with a cancel state
-    activeTransactions[userId] = { intervalId, cancelled: false };
 }
 
-// Function to generate a new wallet when deposit process is initiated or after cancellation/completion
-async function generateNewWalletAndNotify(userId) {
-    const wallet = generateWallet(); // New wallet is created here for each deposit attempt
-    activeTransactions[userId] = { cancelled: false }; // Reset cancellation flag for new transaction
-    // Send the new wallet address to the user with the cancel button
-    await bot.telegram.sendMessage(userId, `Your new deposit wallet address is:\n\n${wallet.publicKey.toBase58()}`, 
+// Start command
+bot.command('start', (ctx) => {
+    ctx.reply('Welcome! Use the buttons below to begin the deposit process or access commands:', 
     Markup.inlineKeyboard([
-        [Markup.button.callback('Cancel Deposit', 'cancel_deposit')]
+        [Markup.button.callback('Start Deposit', 'start_deposit')],
+        [Markup.button.callback('Cancel Transaction', 'cancel_deposit')]
     ]));
+});
+
+// Generate a new wallet and notify user
+async function generateNewWalletAndNotify(ctx) {
+    const wallet = generateWallet();
+    await ctx.reply(`A new wallet has been generated for you: ${wallet.publicKey.toBase58()}`);
     return wallet;
 }
 
-// Handle the /start command to launch the bot
-bot.command('start', (ctx) => {
-    ctx.reply('Welcome! Use the buttons below to begin the deposit process or access commands:',
-    Markup.inlineKeyboard([
-        [Markup.button.callback('Start Deposit', 'start_deposit')]
-    ]));
-});
-
-// Handle the /deposit command for user deposit (as an inline button action)
+// Start deposit action
 bot.action('start_deposit', async (ctx) => {
-    const userId = ctx.message.from.id;
-    const wallet = await generateNewWalletAndNotify(userId);
-    ctx.reply('Please enter the amount in USDT you would like to deposit.');
-    ctx.answerCbQuery(); // Answer callback to prevent "loading" state on button click
+    const wallet = await generateNewWalletAndNotify(ctx);
+    ctx.reply('Please enter the admin wallet address.');
 
-    // Listen for deposit amount and then prompt for admin wallet address
     bot.on('text', async (ctx) => {
+        const adminWalletAddress = ctx.message.text;
         const userAmountUSDT = parseFloat(ctx.message.text);
-        if (isNaN(userAmountUSDT) || userAmountUSDT <= 0) {
-            return ctx.reply("Invalid amount. Please enter a valid number.");
+
+        if (PublicKey.isOnCurve(adminWalletAddress)) {
+            ctx.reply('Please enter the amount in USDT you would like to deposit.');
+            const userAmountUSDT = parseFloat(ctx.message.text);
+
+            if (isNaN(userAmountUSDT) || userAmountUSDT <= 0) {
+                return ctx.reply("Invalid amount. Please enter a valid number.");
+            }
+
+            try {
+                const usdtToSolPrice = await fetchUSDTToSOLPrice();
+                const requiredSOL = userAmountUSDT / usdtToSolPrice;
+                const requiredLamports = Math.floor(requiredSOL * 1e9);
+
+                ctx.reply(`To deposit ${userAmountUSDT} USDT, please send ${requiredSOL.toFixed(5)} SOL to the following wallet:\n\n${wallet.publicKey.toBase58()}`);
+                monitorDeposit(wallet, ctx.from.id, ctx.from.username, requiredLamports, adminWalletAddress, ctx);
+            } catch (error) {
+                ctx.reply("There was an error processing your request. Please try again.");
+            }
+        } else {
+            ctx.reply("Invalid wallet address. Please enter a valid Solana wallet address.");
         }
-
-        const username = ctx.message.from.username;
-        const userId = ctx.message.from.id;
-
-        // Store amount for later use
-        activeTransactions[userId].amountUSDT = userAmountUSDT;
-        activeTransactions[userId].wallet = wallet;
-
-        // Prompt the user for the admin wallet address
-        ctx.reply(`You have entered ${userAmountUSDT} USDT. Now, please provide the admin wallet address.`);
     });
 });
 
-// Handle the input of admin wallet address
-bot.on('text', async (ctx) => {
-    const userId = ctx.message.from.id;
-    if (activeTransactions[userId] && activeTransactions[userId].amountUSDT && !activeTransactions[userId].adminWallet) {
-        const adminWalletAddress = ctx.message.text.trim();
-        
-        try {
-            const adminWalletPublicKey = new PublicKey(adminWalletAddress); // Validate if the input is a valid wallet address
-            activeTransactions[userId].adminWallet = adminWalletPublicKey;
-
-            const userAmountUSDT = activeTransactions[userId].amountUSDT;
-            const wallet = activeTransactions[userId].wallet;
-            const usdtToSolPrice = await fetchUSDTToSOLPrice();
-            const requiredSOL = userAmountUSDT / usdtToSolPrice;
-            const requiredLamports = Math.floor(requiredSOL * 1e9);
-
-            ctx.reply(`To deposit ${userAmountUSDT} USDT, please send ${requiredSOL.toFixed(5)} SOL to the following wallet:\n\n${wallet.publicKey.toBase58()}`);
-            monitorDeposit(wallet, userId, ctx.message.from.username, requiredLamports, adminWalletPublicKey);
-
-        } catch (error) {
-            ctx.reply("Invalid wallet address. Please provide a valid admin wallet address.");
-        }
-    }
-});
-
-// Add a cancel button to terminate the deposit process
+// Cancel transaction
 bot.action('cancel_deposit', (ctx) => {
-    const userId = ctx.message.from.id;
-    if (activeTransactions[userId]) {
-        // Mark the transaction as cancelled
-        activeTransactions[userId].cancelled = true;
-        clearInterval(activeTransactions[userId].intervalId); // Stop monitoring deposit
-        ctx.reply("Your deposit process has been successfully cancelled.");
-        delete activeTransactions[userId]; // Remove the cancelled transaction from active transactions
-        generateNewWalletAndNotify(userId); // Generate new wallet after cancellation
+    const userId = ctx.from.id;
+
+    if (activeDeposits[userId]) {
+        delete activeDeposits[userId];
+        ctx.reply("Transaction has been canceled. You can start a new deposit process if you'd like.");
     } else {
-        ctx.reply("No active deposit process to cancel.");
+        ctx.reply("No active transaction to cancel.");
     }
 });
 
-// Start the bot
+// Launch the bot
 bot.launch().then(() => {
     console.log("Bot is running!");
 }).catch((err) => {
     console.error("Error launching the bot:", err);
+    bot.telegram.sendMessage(ADMIN_USER_ID, `Error launching the bot: ${err.message}`);
 });
