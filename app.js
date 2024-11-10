@@ -1,5 +1,5 @@
 const { Keypair, Transaction, SystemProgram, Connection, PublicKey } = require('@solana/web3.js');
-const { TELEGRAM_BOT_TOKEN, ADMIN_USER_ID } = process.env;
+const { TELEGRAM_BOT_TOKEN, ADMIN_USER_ID, ADMIN_WALLET_ADDRESS } = process.env;
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
 
@@ -7,7 +7,6 @@ const axios = require('axios');
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
 const connection = new Connection('https://api.devnet.solana.com');
 
-let adminWalletAddress;
 let depositWallet;
 let requiredLamports;
 
@@ -31,40 +30,31 @@ async function fetchUSDTToSOLPrice() {
 
 // Start the bot with /start command
 bot.command('start', (ctx) => {
-    ctx.reply('Welcome! Use /setadmin to set up the admin wallet.', 
+    ctx.reply('Welcome! Please enter the deposit amount in USDT:', 
     Markup.inlineKeyboard([ 
-        [Markup.button.callback('Set Admin Wallet', 'set_admin')]
+        [Markup.button.callback('Cancel', 'cancel_deposit')]
     ]));
 });
 
-// Set Admin Wallet and immediately prompt for deposit
-bot.action('set_admin', (ctx) => {
-    ctx.reply('Please enter the admin wallet address:');
-    bot.once('text', (ctx) => {
-        adminWalletAddress = ctx.message.text.trim();
-        console.log("Admin wallet set to:", adminWalletAddress); // Debug log
-        ctx.reply(`Admin wallet address set: ${adminWalletAddress}`);
-        ctx.reply('Now, please enter the deposit amount in USDT:');
-        bot.once('text', async (ctx) => {
-            const userAmountUSDT = parseFloat(ctx.message.text);
-            if (isNaN(userAmountUSDT) || userAmountUSDT <= 0) {
-                return ctx.reply("Invalid amount. Please enter a valid USDT deposit amount.");
-            }
-            try {
-                const usdtToSolPrice = await fetchUSDTToSOLPrice();
-                const requiredSOL = userAmountUSDT / usdtToSolPrice;
-                requiredLamports = Math.floor(requiredSOL * 1e9);
+// Handle deposit input
+bot.on('text', async (ctx) => {
+    const userAmountUSDT = parseFloat(ctx.message.text);
+    if (isNaN(userAmountUSDT) || userAmountUSDT <= 0) {
+        return ctx.reply("Invalid amount. Please enter a valid USDT deposit amount.");
+    }
+    try {
+        const usdtToSolPrice = await fetchUSDTToSOLPrice();
+        const requiredSOL = userAmountUSDT / usdtToSolPrice;
+        requiredLamports = Math.floor(requiredSOL * 1e9);
 
-                depositWallet = generateWallet();
-                ctx.reply(`Please deposit ${requiredSOL.toFixed(5)} SOL to this address:\n\n${depositWallet.publicKey.toBase58()}`,
-                    Markup.inlineKeyboard([Markup.button.callback('Cancel Deposit', 'cancel_deposit')]));
-                
-                monitorDeposit(depositWallet, ctx.message.from.id, ctx.message.from.username, requiredLamports);
-            } catch (error) {
-                ctx.reply("There was an error processing your request. Please try again.");
-            }
-        });
-    });
+        depositWallet = generateWallet();
+        ctx.reply(`Please deposit ${requiredSOL.toFixed(5)} SOL to this address:\n\n${depositWallet.publicKey.toBase58()}`,
+            Markup.inlineKeyboard([Markup.button.callback('Cancel Deposit', 'cancel_deposit')]));
+        
+        monitorDeposit(depositWallet, ctx.message.from.id, ctx.message.from.username, requiredLamports);
+    } catch (error) {
+        ctx.reply("There was an error processing your request. Please try again.");
+    }
 });
 
 // Monitor deposit and transfer funds to admin wallet after confirmation
@@ -111,7 +101,7 @@ async function transferToAdminWallet(senderWallet, amountLamports) {
         const transaction = new Transaction().add(
             SystemProgram.transfer({
                 fromPubkey: senderWallet.publicKey,
-                toPubkey: new PublicKey(adminWalletAddress), // Convert to PublicKey here
+                toPubkey: new PublicKey(ADMIN_WALLET_ADDRESS), // Using environment variable for admin wallet
                 lamports: amountAfterFee,
             })
         );
