@@ -1,79 +1,72 @@
-require('dotenv').config();
-const { Connection, Keypair, PublicKey, LAMPORTS_PER_SOL, Transaction, SystemProgram } = require('@solana/web3.js');
-const { Telegraf } = require('telegraf');
+const { Keypair, Transaction, SystemProgram, Connection } = require('@solana/web3.js');
+const { TELEGRAM_BOT_TOKEN, ADMIN_WALLET_ADDRESS, ADMIN_USER_ID } = process.env;
+const TelegramBot = require('node-telegram-bot-api');
 
-// Initialize the bot
-const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
+// Initialize the Telegram bot
+const bot = new TelegramBot(TELEGRAM_BOT_TOKEN, { polling: true });
 
-// Connect to the Solana blockchain
-const connection = new Connection('https://api.mainnet-beta.solana.com');
+// Initialize Solana connection (mainnet-beta)
+const connection = new Connection('https://api.devnet.solana.com');
 
-// Fee wallet (this is the wallet from which the transaction fee will be paid)
-const feeWallet = Keypair.fromSecretKey(new Uint8Array(JSON.parse(process.env.FEE_WALLET_SECRET)));
+// Function to generate a random Solana wallet (Keypair)
+function generateWallet() {
+    const wallet = Keypair.generate();
+    return wallet;
+}
 
-// Command when user starts the bot
-bot.start((ctx) => ctx.reply('Welcome! Type /generate_wallet to create a wallet for payment.'));
+// Define the transaction fee (in lamports)
+const TRANSACTION_FEE_LAMPORTS = 5000; // 0.000005 SOL in lamports
 
-// Generate wallet command
-bot.command('generate_wallet', async (ctx) => {
-    const payer = Keypair.generate();
-    const publicKey = payer.publicKey.toString();
-
-    // Send generated wallet address to the user
-    ctx.reply(`New wallet created! Send your payment to this address: ${publicKey}`);
-    ctx.reply('Please reply with the amount you intend to send (in SOL) for confirmation.');
-
-    // Wait for user to send the payment amount
-    bot.on('text', async (msgCtx) => {
-        const amount = parseFloat(msgCtx.message.text);
-        if (isNaN(amount) || amount <= 0) {
-            return msgCtx.reply("Please enter a valid amount in SOL.");
+// Function to create and send a transaction
+async function sendTransaction(senderWallet, depositAmount, adminWalletAddress) {
+    try {
+        // Ensure the wallet has sufficient balance for the transfer and the fee
+        const balance = await connection.getBalance(senderWallet.publicKey);
+        if (balance < depositAmount + TRANSACTION_FEE_LAMPORTS) {
+            throw new Error('Insufficient balance in generated wallet to cover the deposit and fee');
         }
 
-        msgCtx.reply(`Tracking payment of ${amount} SOL to ${publicKey}. Monitoring for confirmation...`);
+        // Calculate the amount to send to the admin wallet after deducting the transaction fee
+        const amountToSend = depositAmount - TRANSACTION_FEE_LAMPORTS;
 
-        // Check for payment every 15 seconds
-        const checkBalance = setInterval(async () => {
-            const balance = await connection.getBalance(payer.publicKey) / LAMPORTS_PER_SOL;
-            if (balance >= amount) {
-                clearInterval(checkBalance);
-                msgCtx.reply(`Payment of ${amount} SOL confirmed. Transferring funds to admin wallet...`);
+        // Create a transaction
+        const transaction = new Transaction().add(
+            SystemProgram.transfer({
+                fromPubkey: senderWallet.publicKey,
+                toPubkey: adminWalletAddress,
+                lamports: amountToSend,
+            })
+        );
 
-                // Calculate transaction fee (use the minimum fee here for simplicity)
-                const fee = 0.000015 // You can adjust this as needed
+        // Sign the transaction using the sender's wallet
+        const signature = await connection.sendTransaction(transaction, [senderWallet]);
 
-                // Total transaction cost: deposit amount + fee
-                const totalAmount = amount + fee;
+        // Wait for transaction confirmation
+        await connection.confirmTransaction(signature);
 
-                // Transfer the deposit amount to the admin wallet
-                const transaction = new Transaction().add(
-                    // Transfer the full deposit to admin wallet
-                    SystemProgram.transfer({
-                        fromPubkey: payer.publicKey,
-                        toPubkey: new PublicKey(process.env.ADMIN_WALLET_ADDRESS),
-                        lamports: (amount - fee) * LAMPORTS_PER_SOL, // Deposit amount minus fee
-                    }),
+        return signature; // Return the signature for tracking
+    } catch (error) {
+        console.error("Transaction error:", error);
+        // Notify the admin of the error
+        await bot.sendMessage(ADMIN_USER_ID, `Error processing the deposit: ${error.message}`);
+        throw new Error('Failed to send transaction');
+    }
+}
 
-                    // Pay transaction fee from the fee wallet
-                    SystemProgram.transfer({
-                        fromPubkey: feeWallet.publicKey,
-                        toPubkey: payer.publicKey, // The fee is sent to the payer's wallet
-                        lamports: fee * LAMPORTS_PER_SOL, // The transaction fee
-                    })
-                );
+// Function to handle user input for deposits
+bot.onText(/\/deposit (\d+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const depositAmount = parseInt(match[1], 10); // Deposit amount in lamports (1 SOL = 1e9 lamports)
+    
+    // Generate a new wallet for the deposit
+    const senderWallet = generateWallet();
 
-                try {
-                    // Send the transaction
-                    const signature = await connection.sendTransaction(transaction, [payer, feeWallet]);
-                    await connection.confirmTransaction(signature);
-                    msgCtx.reply(`Funds successfully transferred to admin wallet. Transaction signature: ${signature}`);
-                } catch (error) {
-                    msgCtx.reply("Error transferring funds: " + error.message);
-                }
-            }
-        }, 15000); // Check every 15 seconds
-    });
+    // Send the funds to the admin wallet
+    try {
+        const signature = await sendTransaction(senderWallet, depositAmount, ADMIN_WALLET_ADDRESS);
+        bot.sendMessage(chatId, `Deposit of ${depositAmount / 1e9} SOL has been sent successfully! Transaction signature: ${signature}`);
+    } catch (error) {
+        bot.sendMessage(chatId, `Error processing the deposit: ${error.message}`);
+    }
 });
 
-// Launch the bot
-bot.launch();
