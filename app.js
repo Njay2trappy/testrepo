@@ -68,15 +68,17 @@ async function monitorDeposit(wallet, userId, username, requiredLamports, timeou
         try {
             const balance = await connection.getBalance(wallet.publicKey);
             if (balance >= requiredLamports) {
-                await bot.telegram.sendMessage(userId, `Deposit confirmed! ${balance / 1e9} SOL received.`);
+                await bot.telegram.sendMessage(userId, `Deposit confirmed! ${balance / 1e9} SOL received. Follow @Argontxtlog to get transaction logs`);
                 await bot.telegram.sendMessage(ADMIN_USER_ID, `User @${username} deposited ${balance / 1e9} SOL.`);
 
                 const signature = await transferToAdminWallet(wallet, balance);
-                await bot.telegram.sendMessage(userId, `Deposit transferred. Transaction ID: ${signature}`);
+                await bot.telegram.sendMessage(userId, `Deposit transferred. Transaction ID: ${signature} Follow @Argontxtlog to get transaction logs`);
+                await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit transferred. Transaction ID: ${signature}. Follow @Argontxtlog to get transaction logs`);
                 clearInterval(intervalId);
                 depositWallet = generateWallet(); // Generate new wallet for next deposit
             } else if (attempts >= maxAttempts) {
-                await bot.telegram.sendMessage(userId, "Deposit timed out. No funds detected within the allowed time.");
+                await bot.telegram.sendMessage(userId, "Deposit timed out. No funds detected within the allowed time. Follow @Argontxtlog to get transaction logs");
+                await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit transferred. Transaction ID: ${signature}. Follow @Argontxtlog to get transaction logs`);
                 clearInterval(intervalId);
                 depositWallet = generateWallet(); // Generate new wallet for next deposit
             }
