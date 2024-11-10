@@ -66,9 +66,9 @@ async function transferToAdminWallet(senderWallet, amountLamports) {
 }
 
 // Handle deposit monitoring and transfer after confirmation
-async function monitorDeposit(wallet, userId, username, requiredLamports) {
+async function monitorDeposit(wallet, userId, username, requiredLamports, timeoutDuration = 900000) { // 15 minutes
     const checkInterval = 15000; // 15 seconds
-    const maxAttempts = 60; // 15 minutes
+    const maxAttempts = timeoutDuration / checkInterval; // Calculate based on timeoutDuration
     let attempts = 0;
 
     const intervalId = setInterval(async () => {
@@ -84,13 +84,18 @@ async function monitorDeposit(wallet, userId, username, requiredLamports) {
                 await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit from @${username} transferred to admin wallet. Transaction ID: ${signature}`);
 
                 clearInterval(intervalId);
+                // Expire the wallet after the transaction is complete
+                wallet = null; // Expiring the wallet
             } else if (attempts >= maxAttempts) {
                 await bot.telegram.sendMessage(userId, "Deposit timed out. No funds detected within the allowed time.");
                 await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit attempt by @${username} has timed out.`);
                 clearInterval(intervalId);
+                // Expire the wallet after the timeout
+                wallet = null; // Expiring the wallet
             }
         } catch (error) {
             console.error("Error monitoring deposit:", error);
+            await bot.telegram.sendMessage(ADMIN_USER_ID, `Error monitoring deposit: ${error.message}`);
         }
     }, checkInterval);
 }
