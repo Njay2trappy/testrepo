@@ -84,10 +84,14 @@ async function monitorDeposit(wallet, userId, username, requiredLamports, timeou
                 await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit from @${username} transferred to admin wallet. Transaction ID: ${signature}`);
 
                 clearInterval(intervalId); // Stop monitoring after successful deposit
+                // Create a new wallet for the next deposit attempt
+                generateNewWallet(ctx);
             } else if (attempts >= maxAttempts) {
                 await bot.telegram.sendMessage(userId, "Deposit timed out. No funds detected within the allowed time.");
                 await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit attempt by @${username} has timed out.`);
                 clearInterval(intervalId); // Stop monitoring after timeout
+                // Create a new wallet for the next deposit attempt
+                generateNewWallet(ctx);
             }
         } catch (error) {
             console.error("Error monitoring deposit:", error);
@@ -104,9 +108,17 @@ bot.command('start', (ctx) => {
     ]));
 });
 
+// Function to generate a new wallet when deposit process is initiated
+async function generateNewWallet(ctx) {
+    const wallet = generateWallet(); // New wallet is created here for each deposit attempt
+    // Store or track the wallet for use in the deposit process
+    ctx.reply(`A new wallet has been generated for you: ${wallet.publicKey.toBase58()}`);
+    return wallet;
+}
+
 // Handle the /deposit command for user deposit (as an inline button action)
 bot.action('start_deposit', (ctx) => {
-    const wallet = generateWallet(); // New wallet is created here for each deposit attempt
+    const wallet = generateNewWallet(ctx); // New wallet is created here for each deposit attempt
     ctx.reply('Please enter the amount in USDT you would like to deposit.');
     ctx.answerCbQuery(); // Answer callback to prevent "loading" state on button click
 
