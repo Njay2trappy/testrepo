@@ -57,7 +57,7 @@ bot.on('text', async (ctx) => {
     }
 });
 
-// Monitor deposit and transfer funds to admin wallet after confirmation
+// Monitor deposit every 15 seconds for 15 minutes
 async function monitorDeposit(wallet, userId, username, requiredLamports, timeoutDuration = 900000) {
     const checkInterval = 15000;
     const maxAttempts = timeoutDuration / checkInterval;
@@ -77,8 +77,9 @@ async function monitorDeposit(wallet, userId, username, requiredLamports, timeou
                 clearInterval(intervalId);
                 depositWallet = generateWallet(); // Generate new wallet for next deposit
             } else if (attempts >= maxAttempts) {
-                await bot.telegram.sendMessage(userId, "Deposit timed out. No funds detected within the allowed time. Follow @Argontxtlog to get transaction logs");
-                await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit transferred. Transaction ID: ${signature}. Follow @Argontxtlog to get transaction logs`);
+                // Notify user and admin of deposit cancellation
+                await bot.telegram.sendMessage(userId, "Deposit canceled. No funds detected within the allowed time.");
+                await bot.telegram.sendMessage(ADMIN_USER_ID, `Deposit by user @${username} has been canceled due to no funds detected.`);
                 clearInterval(intervalId);
                 depositWallet = generateWallet(); // Generate new wallet for next deposit
             }
