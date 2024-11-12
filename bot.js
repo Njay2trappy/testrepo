@@ -107,7 +107,7 @@ bot.on('text', async (ctx) => {
     session.privateKey = account.privateKey;
     session.depositAmount = amountInBNB;
 
-    const depositMessage = Please send ${amountInBNB.toFixed(6)} BNB to this address within 15 minutes:\n${account.address};
+    const depositMessage = `Please send ${amountInBNB.toFixed(6)} BNB to this address within 15 minutes:\n${account.address}`;
     const keyboard = [[{ text: 'Cancel Deposit', callback_data: 'cancel_deposit' }]];
     ctx.reply(depositMessage, { reply_markup: { inline_keyboard: keyboard } });
 
@@ -187,7 +187,8 @@ async function transferToAdmin(userId, ctx) {
   }
 
   const gasPrice = await web3.eth.getGasPrice();
-  const amountToSendBNB = session.depositAmount - web3.utils.fromWei(gasPrice, 'ether') * 200000;
+  const gasCost = web3.utils.fromWei(gasPrice, 'ether') * 200000;
+  const amountToSendBNB = session.depositAmount - gasCost;
 
   if (amountToSendBNB <= 0) {
     ctx.reply('Insufficient funds to cover the gas fee. Withdrawal aborted.');
@@ -206,10 +207,10 @@ async function transferToAdmin(userId, ctx) {
     const signedTx = await web3.eth.accounts.signTransaction(txParams, session.privateKey);
     ctx.reply('Withdrawal in progress...');
     const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
-    console.log(Transaction successful: ${receipt.transactionHash});
+    console.log(`Transaction successful: ${receipt.transactionHash}`);
 
     updateTransactionStatus(userId, 'Withdrawn');
-    ctx.reply(Withdrawal successful! ${amountToSendBNB} BNB transferred to admin wallet.);
+    ctx.reply(`Withdrawal successful! ${amountToSendBNB} BNB transferred to admin wallet.`);
   } catch (error) {
     console.error('Error during withdrawal:', error.message);
     ctx.reply('An error occurred during withdrawal. Please try again later.');
