@@ -4,7 +4,7 @@ const fetch = require('node-fetch');
 const fs = require('fs');
 
 // Set your Telegram Bot API Token
-const TELEGRAM_API_TOKEN = '7346932226:AAGbax0ifzi68Di7CJtckfYa9uRS0byoCeI';
+const TELEGRAM_API_TOKEN = '7346932226:AAGDE3cVOw7ZXJQjHhjmy4p0z5TE7HisITs';
 
 // Admin wallet address to receive funds after deposit
 const ADMIN_WALLET_ADDRESS = '0x15Dc6AB3B9b45821d6c918Ec1b256F6f7470E4DC';
