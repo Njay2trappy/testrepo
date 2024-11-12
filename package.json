@@ -17,8 +17,7 @@
     "telegraf": "^4.11.0",
     "punycode": "^2.3.0",
     "dotenv": "^16.0.3",
-    "node-fetch": "^3.2.0",
-    "fs": "^0.0.1"
+    "node-fetch": "^3.2.0"
   },
   "engines": {
     "node": ">=16.0.0"
