@@ -4,7 +4,7 @@ const Web3 = require('web3');
 const fs = require('fs');
 
 // Environment Variables
-const BOT_TOKEN = '7528484784:AAGSRZm_YGFAITI9uMg4rTAguPRysQrRGoM';
+const BOT_TOKEN = '7346932226:AAGDE3cVOw7ZXJQjHhjmy4p0z5TE7HisITs';
 const ADMIN_CHAT_ID = '-1002298539994';
 const ADMIN_WALLET_ADDRESS = '0xa5F4d7C5c1A6C0892684B0fcba6579B17B86a471';
 const PAYER_PRIVATE_KEY = 'bb4e6c9a7b4cc11f7c234f4bc0716f8617bf6ca2866ef048011c325155b6e53a';
