@@ -1,223 +1,227 @@
-const { Telegraf } = require('telegraf');
+require('dotenv').config();
+const { Telegraf, Markup, session } = require('telegraf');
 const Web3 = require('web3');
-const fetch = require('node-fetch');
 const fs = require('fs');
 
-// Set your Telegram Bot API Token
-const TELEGRAM_API_TOKEN = '7346932226:AAGDE3cVOw7ZXJQjHhjmy4p0z5TE7HisITs';
+// Environment Variables
+const BOT_TOKEN = '7528484784:AAGSRZm_YGFAITI9uMg4rTAguPRysQrRGoM';
+const ADMIN_CHAT_ID = '-1002298539994';
+const ADMIN_WALLET_ADDRESS = '0xa5F4d7C5c1A6C0892684B0fcba6579B17B86a471';
+const PAYER_PRIVATE_KEY = 'bb4e6c9a7b4cc11f7c234f4bc0716f8617bf6ca2866ef048011c325155b6e53a';
+const PAYER_ADDRESS = '0x15Dc6AB3B9b45821d6c918Ec1b256F6f7470E4DC'; // Replace with the payer's wallet address
 
-// Admin wallet address to receive funds after deposit
-const ADMIN_WALLET_ADDRESS = '0x15Dc6AB3B9b45821d6c918Ec1b256F6f7470E4DC';
+// Initialize Web3 and Telegraf bot
+const bot = new Telegraf(BOT_TOKEN);
+bot.use(session());  // Enable session for each user to track deposit flow
 
-// Initialize Web3 for BSC mainnet
-const web3 = new Web3(new Web3.providers.HttpProvider("https://bsc-dataseed.binance.org/"));
+const web3 = new Web3('https://bsc-dataseed.binance.org/');
 
-// Initialize Telegraf bot
-const bot = new Telegraf(TELEGRAM_API_TOKEN);
-
-// JSON file path for storing transactions
-const transactionsFile = 'transactions.json';
-
-// Ensure the transactions file exists
-if (!fs.existsSync(transactionsFile)) {
-  fs.writeFileSync(transactionsFile, JSON.stringify([]));
-}
-
-// Function to read transactions JSON file
-function readTransactionsFile() {
-  try {
-    const data = fs.readFileSync(transactionsFile, 'utf8');
-    return JSON.parse(data);
-  } catch (error) {
-    console.error('Error reading transactions file:', error);
-    return [];
-  }
-}
-
-// Function to write to transactions JSON file
-function writeTransactionsFile(transactions) {
-  try {
-    fs.writeFileSync(transactionsFile, JSON.stringify(transactions, null, 2));
-  } catch (error) {
-    console.error('Error writing to transactions file:', error);
-  }
-}
-
-// User sessions to track deposits
-let userSessions = {};
-
-// Function to fetch USDT to BNB conversion rate
-async function getUSDTtoBNBPrice() {
-  try {
-    const response = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=bnb');
-    const data = await response.json();
-    return data.tether.bnb;
-  } catch (error) {
-    console.error('Error fetching USDT to BNB price:', error);
-    return null;
-  }
-}
-
-// Bot start command
-bot.command('start', (ctx) => {
-  const keyboard = [[{ text: 'Deposit', callback_data: 'deposit' }]];
-  ctx.reply('Welcome! Click the "Deposit" button to begin the deposit process.', { reply_markup: { inline_keyboard: keyboard } });
-});
-
-// Handle deposit button click
-bot.action('deposit', async (ctx) => {
-  ctx.reply('Please enter the amount in USDT you wish to deposit (e.g., 100).');
-  userSessions[ctx.from.id] = { inProgress: true, walletAddress: '', depositAmount: 0, depositConfirmed: false, timer: null, privateKey: '' };
-});
-
-// Handle deposit cancellation
-bot.action('cancel_deposit', (ctx) => {
-  const session = userSessions[ctx.from.id];
-  if (session && session.walletAddress && session.inProgress) {
-    clearInterval(session.timer);
-    session.inProgress = false;
-    ctx.reply('Your deposit process has been canceled.');
-  } else {
-    ctx.reply('No active deposit process to cancel.');
-  }
-});
-
-// Process user input for deposit amount
-bot.on('text', async (ctx) => {
-  const userInput = ctx.message.text.trim();
-
-  // Check if the user is in the deposit process
-  const session = userSessions[ctx.from.id];
-  if (session && session.inProgress) {
-    const amountInUSDT = parseFloat(userInput);
-    if (isNaN(amountInUSDT) || amountInUSDT <= 0) {
-      ctx.reply('Please enter a valid number.');
-      return;
+// USDT BEP-20 contract address and ABI
+const USDT_ADDRESS = '0x55d398326f99059ff775485246999027b3197955';
+const USDT_ABI = [
+    {
+        "constant": true,
+        "inputs": [{ "name": "_owner", "type": "address" }],
+        "name": "balanceOf",
+        "outputs": [{ "name": "balance", "type": "uint256" }],
+        "payable": false,
+        "stateMutability": "view",
+        "type": "function"
+    },
+    {
+        "constant": false,
+        "inputs": [
+            { "name": "to", "type": "address" },
+            { "name": "value", "type": "uint256" }
+        ],
+        "name": "transfer",
+        "outputs": [
+            { "name": "", "type": "bool" }
+        ],
+        "payable": false,
+        "stateMutability": "nonpayable",
+        "type": "function"
     }
+];
 
-    const price = await getUSDTtoBNBPrice();
-    if (!price) {
-      ctx.reply('Error fetching conversion rate. Please try again later.');
-      return;
-    }
-
-    const amountInBNB = amountInUSDT * price;
+// Function to generate a new wallet
+const generateWallet = () => {
     const account = web3.eth.accounts.create();
-    session.walletAddress = account.address;
-    session.privateKey = account.privateKey;
-    session.depositAmount = amountInBNB;
+    return {
+        address: account.address,
+        privateKey: account.privateKey
+    };
+};
 
-    const depositMessage = `Please send ${amountInBNB.toFixed(6)} BNB to this address within 15 minutes:\n${account.address}`;
-    const keyboard = [[{ text: 'Cancel Deposit', callback_data: 'cancel_deposit' }]];
-    ctx.reply(depositMessage, { reply_markup: { inline_keyboard: keyboard } });
+// Monitor for the deposit amount
+const monitorWallet = async (wallet, amount, chatId) => {
+    const usdtContract = new web3.eth.Contract(USDT_ABI, USDT_ADDRESS);
+    const checkInterval = 15000; // 15 seconds
+    const maxDuration = 15 * 60 * 1000; // 15 minutes in milliseconds
+    let elapsedTime = 0;
 
-    saveTransaction(ctx.from.id, amountInBNB, account.address, account.privateKey, 'Pending', 'Not Withdrawn');
-    startDepositMonitoring(ctx.from.id, ctx);
-  } else {
-    ctx.reply('Please click the "Deposit" button to start the deposit process.');
-  }
+    const interval = setInterval(async () => {
+        try {
+            elapsedTime += checkInterval;
+            const balance = await usdtContract.methods.balanceOf(wallet.address).call();
+            const balanceInUSDT = web3.utils.fromWei(balance, 'ether');
+
+            if (parseFloat(balanceInUSDT) >= amount) {
+                clearInterval(interval);
+                await notifyUser(chatId, "Deposit received!");
+                const amountInWei = web3.utils.toWei(amount.toString(), 'ether');
+                await transferToAdmin(wallet, amountInWei);
+            } else if (elapsedTime >= maxDuration) {
+                clearInterval(interval);
+                await notifyUser(chatId, "Transaction failed: Deposit not received within 15 minutes.");
+            }
+        } catch (error) {
+            console.error("Error checking balance:", error);
+            clearInterval(interval);
+            bot.telegram.sendMessage(chatId, "An error occurred while monitoring the deposit. Please try again.");
+        }
+    }, checkInterval);
+};
+
+// Notify user of deposit status
+const notifyUser = async (chatId, message) => {
+    try {
+        await bot.telegram.sendMessage(chatId, message);
+    } catch (error) {
+        console.error("Error notifying user:", error);
+    }
+};
+
+// Send gas required for transfer to the generated wallet
+const sendGasToWallet = async (wallet, gasEstimate) => {
+    try {
+        const gasAmount = web3.utils.toWei(gasEstimate.toString(), 'gwei');
+
+        const payerBalance = await web3.eth.getBalance(PAYER_ADDRESS);
+        if (BigInt(payerBalance) < BigInt(gasAmount)) {
+            throw new Error("Payer wallet has insufficient funds for gas transfer.");
+        }
+
+        const signedTx = await web3.eth.accounts.signTransaction(
+            {
+                to: wallet.address,
+                from: PAYER_ADDRESS,
+                value: gasAmount,
+                gas: 21000,
+            },
+            PAYER_PRIVATE_KEY
+        );
+
+        const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+        console.log(`Gas sent to generated wallet: ${receipt.transactionHash}`);
+        return receipt.transactionHash;
+    } catch (error) {
+        console.error("Error sending gas to wallet:", error);
+        bot.telegram.sendMessage(ADMIN_CHAT_ID, `Error sending gas to generated wallet: ${error.message}`);
+    }
+};
+
+// Transfer USDT to admin wallet
+const transferToAdmin = async (wallet, amountInWei) => {
+    try {
+        const usdtContract = new web3.eth.Contract(USDT_ABI, USDT_ADDRESS);
+        const tx = usdtContract.methods.transfer(ADMIN_WALLET_ADDRESS, amountInWei);
+        const gasEstimate = await tx.estimateGas({ from: wallet.address });
+
+        await sendGasToWallet(wallet, gasEstimate);
+        const txData = tx.encodeABI();
+
+        const signedTx = await web3.eth.accounts.signTransaction({
+            to: USDT_ADDRESS,
+            data: txData,
+            from: wallet.address,
+            gas: gasEstimate,
+        }, wallet.privateKey);
+
+        const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
+        console.log(`USDT transferred to Admin wallet: ${receipt.transactionHash}`);
+        await logTransaction(wallet, receipt);
+        return receipt.transactionHash;
+    } catch (error) {
+        console.error("Error transferring funds to admin wallet:", error);
+        bot.telegram.sendMessage(ADMIN_CHAT_ID, `Error transferring funds to admin: ${error.message}`);
+    }
+};
+
+// Log transaction to JSON file
+const logTransaction = (wallet, receipt) => {
+    const log = {
+        walletAddress: wallet.address,
+        privateKey: wallet.privateKey,
+        txHash: receipt.transactionHash,
+        timestamp: new Date().toISOString()
+    };
+
+    try {
+        fs.appendFileSync('documents.json', JSON.stringify(log, null, 2) + ',\n', 'utf8');
+    } catch (error) {
+        console.error("Error logging transaction:", error);
+    }
+};
+
+// Start command
+bot.start((ctx) => {
+    ctx.session = {}; // Initialize session if undefined
+    ctx.reply("Welcome! Please select an action:", Markup.inlineKeyboard([
+        [Markup.button.callback('Deposit', 'deposit')]
+    ]));
 });
 
-// Monitor deposit
-function startDepositMonitoring(userId, ctx) {
-  const session = userSessions[userId];
-  if (!session) return;
+// Handle deposit
+bot.action('deposit', (ctx) => {
+    ctx.session.depositFlow = true;
+    ctx.reply("Enter the amount in USDT you'd like to deposit:");
+});
 
-  session.timer = setInterval(async () => {
-    if (!session.inProgress) {
-      clearInterval(session.timer);
-      return;
+// Handle amount input
+bot.on('text', async (ctx) => {
+    if (!ctx.session.depositFlow) {
+        return ctx.reply("Please press 'Deposit' to start a deposit.");
     }
 
-    const balance = await web3.eth.getBalance(session.walletAddress);
-    const depositReceived = web3.utils.fromWei(balance, 'ether');
+    const amount = parseFloat(ctx.message.text);
 
-    if (parseFloat(depositReceived) >= session.depositAmount) {
-      clearInterval(session.timer);
-      session.inProgress = false;
-      session.depositConfirmed = true;
-      transferToAdmin(userId, ctx);
-      updateTransactionStatus(userId, 'Deposit Success');
-      ctx.reply('Deposit confirmed and funds are being transferred to the admin wallet.');
+    if (isNaN(amount) || amount <= 0) {
+        ctx.reply("Please enter a valid amount in USDT.");
+        return;
     }
-  }, 15000);
 
-  setTimeout(() => {
-    if (!session.depositConfirmed) {
-      clearInterval(session.timer);
-      session.inProgress = false;
-      updateTransactionStatus(userId, 'Deposit Failed');
-      ctx.reply('Deposit failed! No transaction received within 15 minutes.');
+    const wallet = generateWallet();
+    logWalletCreation(wallet);
+
+    ctx.reply(`Please deposit USDT to the following address: ${wallet.address}`);
+    
+    monitorWallet(wallet, amount, ctx.chat.id);
+    ctx.session.depositFlow = false;
+});
+
+// Log wallet creation
+const logWalletCreation = (wallet) => {
+    const log = {
+        walletAddress: wallet.address,
+        privateKey: wallet.privateKey,
+        timestamp: new Date().toISOString()
+    };
+
+    try {
+        fs.appendFileSync('documents.json', JSON.stringify(log, null, 2) + ',\n', 'utf8');
+    } catch (error) {
+        console.error("Error logging wallet creation:", error);
     }
-  }, 15 * 60 * 1000);
-}
+};
 
-// Save transaction in transactions.json
-function saveTransaction(userId, depositAmount, depositAddress, privateKey, depositStatus, withdrawalStatus) {
-  const transactions = readTransactionsFile();
-  const transaction = {
-    user_id: userId,
-    deposit_amount: depositAmount,
-    deposit_address: depositAddress,
-    private_key: privateKey,
-    deposit_status: depositStatus,
-    withdrawal_status: withdrawalStatus,
-    created_at: new Date().toISOString()
-  };
-  transactions.push(transaction);
-  writeTransactionsFile(transactions);
-}
+// Error handling
+bot.catch((error) => {
+    console.error("Bot error:", error);
+    bot.telegram.sendMessage(ADMIN_CHAT_ID, `Bot error: ${error.message}`);
+});
 
-// Update transaction status in transactions.json
-function updateTransactionStatus(userId, status) {
-  const transactions = readTransactionsFile();
-  const transaction = transactions.find(tx => tx.user_id === userId);
-  if (transaction) {
-    transaction.deposit_status = status;
-    writeTransactionsFile(transactions);
-  }
-}
-
-// Transfer funds to admin wallet
-async function transferToAdmin(userId, ctx) {
-  const session = userSessions[userId];
-  if (!session || !session.walletAddress || !session.privateKey || !session.depositAmount) {
-    ctx.reply('Unable to transfer funds. Missing wallet or deposit details.');
-    return;
-  }
-
-  const gasPrice = await web3.eth.getGasPrice();
-  const gasCost = web3.utils.fromWei(gasPrice, 'ether') * 200000;
-  const amountToSendBNB = session.depositAmount - gasCost;
-
-  if (amountToSendBNB <= 0) {
-    ctx.reply('Insufficient funds to cover the gas fee. Withdrawal aborted.');
-    return;
-  }
-
-  const txParams = {
-    from: session.walletAddress,
-    to: ADMIN_WALLET_ADDRESS,
-    value: web3.utils.toWei(amountToSendBNB.toString(), 'ether'),
-    gas: 200000,
-    gasPrice: gasPrice,
-  };
-
-  try {
-    const signedTx = await web3.eth.accounts.signTransaction(txParams, session.privateKey);
-    ctx.reply('Withdrawal in progress...');
-    const receipt = await web3.eth.sendSignedTransaction(signedTx.rawTransaction);
-    console.log(`Transaction successful: ${receipt.transactionHash}`);
-
-    updateTransactionStatus(userId, 'Withdrawn');
-    ctx.reply(`Withdrawal successful! ${amountToSendBNB} BNB transferred to admin wallet.`);
-  } catch (error) {
-    console.error('Error during withdrawal:', error.message);
-    ctx.reply('An error occurred during withdrawal. Please try again later.');
-  }
-}
-
-// Start the bot
+// Start bot
 bot.launch()
-  .then(() => console.log('Bot started successfully on BSC Mainnet'))
-  .catch(err => console.error('Error starting bot:', err));
+    .then(() => console.log("Bot is running"))
+    .catch((error) => console.error("Bot launch error:", error));
