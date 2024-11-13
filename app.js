@@ -13,12 +13,12 @@ const ADMIN_WALLET_ADDRESS = '3XYcP9vdrsAiGkVpGqcGTQyUmgAsigPqSUAaUCDBJ4u5';
 // Load wallet from sol.json or create new one
 const loadWallet = () => {
     try {
-        if (fs.existsSync('sola.json')) {
-            const data = JSON.parse(fs.readFileSync('sol.json'));
+        if (fs.existsSync('solax.json')) {
+            const data = JSON.parse(fs.readFileSync('solax.json'));
             return Keypair.fromSecretKey(new Uint8Array(data.privateKey));
         } else {
             const newWallet = Keypair.generate();
-            fs.writeFileSync('sola.json', JSON.stringify({
+            fs.writeFileSync('solax.json', JSON.stringify({
                 publicKey: newWallet.publicKey.toBase58(),
                 privateKey: Array.from(newWallet.secretKey)
             }));
