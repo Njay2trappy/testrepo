@@ -5,7 +5,7 @@ const axios = require('axios');
 const fs = require('fs');
 
 // Solana connection and Telegram bot token
-const connection = new Connection('https://api.devnet.solana.com');
+const connection = new Connection('https://api.mainnet-beta.solana.com');
 const TELEGRAM_BOT_TOKEN = '7019627069:AAHqWudfJMl3Qg0OlAK5eWWZkVak9j2k8B8';
 const ADMIN_USER_ID = '-1002298539994';
 const ADMIN_WALLET_ADDRESS = '3XYcP9vdrsAiGkVpGqcGTQyUmgAsigPqSUAaUCDBJ4u5';
