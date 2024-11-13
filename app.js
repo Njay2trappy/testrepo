@@ -5,7 +5,7 @@ const axios = require('axios');
 
 // Initialize the Telegram bot
 const bot = new Telegraf(TELEGRAM_BOT_TOKEN);
-const connection = new Connection('https://api.devnet.solana.com');
+const connection = new Connection('https://api.mainnet-beta.solana.com');
 
 let depositWallet;
 let requiredLamports;
