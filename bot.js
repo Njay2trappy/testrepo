@@ -13,11 +13,13 @@ const bot = new Telegraf(TELEGRAM_TOKEN);
 const connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
 
 async function loadWallets() {
-    if (fs.existsSync('walilets.json')) {
+    if (fs.existsSync('wallets.json')) {  // Corrected the file name here
         const data = await fs.promises.readFile('wallets.json');
         return JSON.parse(data);
-    return {};
+    }
+    return {};  // Added the return statement outside the if block
 }
+
 
 async function saveWallets(wallets) {
     await fs.promises.writeFile('wallets.json', JSON.stringify(wallets, null, 2));
