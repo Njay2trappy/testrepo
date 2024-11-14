@@ -16,7 +16,6 @@ async function loadWallets() {
     if (fs.existsSync('walilets.json')) {
         const data = await fs.promises.readFile('wallets.json');
         return JSON.parse(data);
-    }å
     return {};
 }
 
