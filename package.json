@@ -4,8 +4,8 @@
   "description": "A Telegram bot for processing Solana payments",
   "main": "app.js",
   "scripts": {
-    "start": "concurrently \"node bot.cjs\" \"node app.js\"",
-    "dev": "concurrently \"nodemon bot.cjs\" \"nodemon app.js\""
+    "start": "concurrently \"node bot.js\" \"node app.js\"",
+    "dev": "concurrently \"nodemon bot.js\" \"nodemon app.js\""
   },
   "devDependencies": {
      "nodemon": "^2.0.7"
@@ -24,6 +24,5 @@
     "node": ">=14.0.0"
   },
   "author": "JOHN DOE",
-  "license": "MIT",
-  "type": "module"
+  "license": "MIT"
 }
