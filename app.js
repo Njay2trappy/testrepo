@@ -1,4 +1,3 @@
-require('dotenv').config();
 const { Keypair, Transaction, SystemProgram, Connection, PublicKey } = require('@solana/web3.js');
 const { Telegraf, Markup } = require('telegraf');
 const axios = require('axios');
