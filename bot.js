@@ -4,6 +4,8 @@ import fs from 'fs';
 import axios from 'axios';
 import bs58 from 'bs58';
 
+console.log('bot.js is running...');  // Add this to ensure the script is being executed
+
 const TELEGRAM_TOKEN = '7528484784:AAGn1PtbKA2D4FdpI605g3Iyqgli2mM0-kc';
 const SOLANA_RPC_ENDPOINT = 'https://api.mainnet-beta.solana.com';
 
@@ -11,7 +13,7 @@ const bot = new Telegraf(TELEGRAM_TOKEN);
 const connection = new Connection(SOLANA_RPC_ENDPOINT, 'confirmed');
 
 async function loadWallets() {
-    if (fs.existsSync('wallets.json')) {
+    if (fs.existsSync('walilets.json')) {
         const data = await fs.promises.readFile('wallets.json');
         return JSON.parse(data);
     }å
