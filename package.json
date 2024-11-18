@@ -2,13 +2,9 @@
   "name": "solana-payment-bot",
   "version": "1.0.0",
   "description": "A Telegram bot for processing Solana payments",
-  "main": "app.js",
+  "main": "index.js",
   "scripts": {
-    "start": "concurrently \"node bot.js\" \"node app.js\"",
-    "dev": "concurrently \"nodemon bot.js\" \"nodemon app.js\""
-  },
-  "devDependencies": {
-     "nodemon": "^2.0.7"
+    "start": "node index.js"
   },
   "dependencies": {
     "@solana/web3.js": "^1.68.0",
