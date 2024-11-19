@@ -88,7 +88,6 @@ Works best on Pump.fun
         parse_mode: 'HTML', // Use HTML parsing mode
         reply_markup: Markup.inlineKeyboard([
             [
-        [
             Markup.button.url('🔰Support', 'https://t.me/Unixmachine'),
             Markup.button.url('🌐Website', 'https://x.com/LastLuftwaffe'),
             Markup.button.url('🔗Channel', 'https://t.me/Argontxtlog')
