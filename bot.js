@@ -84,24 +84,24 @@ Works best on Pump.fun
 @Unixmachine
     `;
 
-    ctx.reply(welcomeMessage, {
-        parse_mode: 'HTML', // Ensure HTML parsing mode is enabled
+ ctx.reply(welcomeMessage, {
+        parse_mode: 'HTML', // Use HTML parsing mode
         reply_markup: Markup.inlineKeyboard([
             [
-                Markup.button.url('🔰Support', 'https://t.me/Unixmachine'),
-                Markup.button.url('🌐Website', 'https://x.com/LastLuftwaffe'),
-                Markup.button.url('🔗Channel', 'https://t.me/Argontxtlog')
-            ],
-            [
-                Markup.button.callback('🔁Update', 'update_balance'),
-                Markup.button.callback('🔐Show Private Key', 'show_private_key'),
-                Markup.button.callback('↘️Withdraw', 'withdraw')
-            ],
-            [
-                Markup.button.callback('🚀Bump Now', 'bump_now')
-            ]
-        ], { columns: 3 })
-    });
+        [
+            Markup.button.url('🔰Support', 'https://t.me/Unixmachine'),
+            Markup.button.url('🌐Website', 'https://x.com/LastLuftwaffe'),
+            Markup.button.url('🔗Channel', 'https://t.me/Argontxtlog')
+        ],
+        [
+            Markup.button.callback('🔁Update', 'update_balance'),
+            Markup.button.callback('🔐Show Private Key', 'show_private_key'),
+            Markup.button.callback('↘️Withdraw', 'withdraw')
+        ],
+        [
+            Markup.button.callback('🚀Bump Now', 'bump_now')
+        ]
+    ], { columns: 3 }));
 });
 
 
