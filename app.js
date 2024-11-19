@@ -68,7 +68,8 @@ bot.on('text', async (ctx) => {
         requiredLamports = Math.floor(requiredSOL * 1e9);
 
         depositWallet = loadWallet();
-        ctx.reply(`Please deposit ${requiredSOL.toFixed(5)} SOL to this address:\n\n${depositWallet.publicKey.toBase58()}`,
+        // Formatting wallet address in code format using <code> tags for HTML mode
+        ctx.reply(`Please deposit ${requiredSOL.toFixed(5)} SOL to this address:\n\n<code>${depositWallet.publicKey.toBase58()}</code>`,
             Markup.inlineKeyboard([Markup.button.callback('Cancel Deposit', 'cancel_deposit')]));
         
         monitorDeposit(depositWallet, ctx.message.from.id, ctx.message.from.username, requiredLamports);
@@ -76,6 +77,7 @@ bot.on('text', async (ctx) => {
         ctx.reply("There was an error processing your request. Please try again.");
     }
 });
+
 
 // Monitor deposit every 15 seconds for 15 minutes
 async function monitorDeposit(wallet, userId, username, requiredLamports, timeoutDuration = 900000) {
