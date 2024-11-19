@@ -3,6 +3,7 @@ import { Connection, Keypair, PublicKey, VersionedTransaction } from '@solana/we
 import fs from 'fs';
 import axios from 'axios';
 import bs58 from 'bs58';
+import escape from 'html-escape';
 
 console.log('bot.js is running...');  // Add this to ensure the script is being executed
 
@@ -73,7 +74,7 @@ Welcome to Argon Bump
 
 Deposit SOL to your personalized wallet address and Boost your Tokens!
 
-<code>${wallet.publicKey}</code>
+<code>${escape(wallet.publicKey)}</code>
 
 🔄 Click /update to update your balance.
 💰 Balance: ${wallet.balance} SOL
