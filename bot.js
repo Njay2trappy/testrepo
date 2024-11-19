@@ -73,7 +73,7 @@ Welcome to Argon Bump
 
 Deposit SOL to your personalized wallet address and Boost your Tokens!
 
-${wallet.publicKey}
+<code>${wallet.publicKey}</code>
 
 🔄 Click /update to update your balance.
 💰 Balance: ${wallet.balance} SOL
