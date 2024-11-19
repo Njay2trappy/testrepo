@@ -100,7 +100,7 @@ Works best on Pump.fun
         [
             Markup.button.callback('🚀Bump Now', 'bump_now')
         ]
-    ], { columns: 3 }));
+    ], { columns: 3 })});
 });
 
 
