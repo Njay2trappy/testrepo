@@ -47,30 +47,48 @@ function saveTokens(userId, tokens) {
 
 // Function to clear tracking, delete the wallet file, and reset the bot
 function clearTracking(userId, ctx) {
-  // Stop the active interval if any
   if (activeIntervals[userId]) {
     clearInterval(activeIntervals[userId]);
     delete activeIntervals[userId];
   }
 
-  // Remove the listener for wallet tracking
   if (activeListeners[userId]) {
-    bot.off('text', activeListeners[userId]); // Remove the listener
+    bot.off('text', activeListeners[userId]);
     delete activeListeners[userId];
   }
 
-  // Delete the user's wallet data file
   try {
     fs.unlinkSync(`tokens_${userId}.json`);
   } catch (err) {
     console.error('Error deleting wallet file:', err);
   }
 
-  // Send the user the welcome message to restart the bot
   ctx.reply(
     `ARGON | Wallet Tracker👾\n\n🎯 Never miss any token purchased by your favorite WHALEs. Track their wallets, copy their trades, and make more profits.\n\n🔴 Due to high usage, wallets are tracked every 2 minutes.\n\n💎 Upgrade to Premium for faster tracking ⚡️\n\n🔥 Ready to track a WHALE wallet? 👇`,
     Markup.keyboard(['Track Wallet']).resize()
   );
+}
+
+// Function to send only the first 10 tokens initially
+function sendLimitedTokens(tokens, savedTokens, ctx) {
+  let message = '🚀 **Top Tokens in WHALE wallet:**\n\n';
+  const limitedTokens = tokens.slice(0, 10);
+
+  limitedTokens.forEach((token) => {
+    const mintAddress = token.data.mintAddress || 'Unknown Mint';
+    const tokenName = token.data.name || 'Unknown Token';
+    const amount = (parseFloat(token.data.amount) || 0) / 1_000_000;
+    const symbol = token.data.symbol || 'Unknown Symbol';
+
+    if (!savedTokens[mintAddress]) {
+      savedTokens[mintAddress] = { name: tokenName, symbol, amount };
+    }
+
+    message += `🌐 ${tokenName} (${symbol}): ${amount}\n💰 Mint Address: <code>${mintAddress}</code>\n\n`;
+  });
+
+  saveTokens(ctx.chat.id, savedTokens);
+  ctx.replyWithHTML(message);
 }
 
 // /start command
@@ -85,7 +103,6 @@ bot.start((ctx) => {
 bot.hears('Track Wallet', async (ctx) => {
   const userId = ctx.chat.id;
 
-  // If already tracking, notify the user
   if (activeIntervals[userId]) {
     return ctx.reply(
       `🛑 You're already tracking a wallet. Please cancel the current tracking first.`,
@@ -95,10 +112,8 @@ bot.hears('Track Wallet', async (ctx) => {
     );
   }
 
-  // Prompt for wallet address
   ctx.reply('🔍 Please provide the Solana wallet address you want to track:');
 
-  // Define a listener for the wallet address
   const listener = async (ctx) => {
     const userAddress = ctx.message.text.trim();
 
@@ -107,65 +122,28 @@ bot.hears('Track Wallet', async (ctx) => {
     );
 
     const savedTokens = loadSavedTokens(userId);
-
-    // Initial wallet check
     const tokenData = await checkWallet(userAddress);
+
     if (tokenData && tokenData.tokens) {
-      const newTokens = tokenData.tokens;
-      let message = '🚀 **Top Tokens in WHALE wallet:**\n\n';
+      sendLimitedTokens(tokenData.tokens, savedTokens, ctx);
 
-      newTokens.forEach((token) => {
-        const mintAddress = token.data.mintAddress || 'Unknown Mint';
-        const tokenName = token.data.name || 'Unknown Token';
-        const amount = (parseFloat(token.data.amount) || 0) / 1_000_000;
-        const symbol = token.data.symbol || 'Unknown Symbol';
-
-        if (!savedTokens[mintAddress]) {
-          savedTokens[mintAddress] = { name: tokenName, symbol, amount };
-        }
-
-        message += `🌐 ${tokenName} (${symbol}): ${amount}\n💰 Mint Address: <code>${mintAddress}</code>\n\n`;
-      });
-
-      saveTokens(userId, savedTokens);
-
-      ctx.replyWithHTML(
-        message,
-        Markup.inlineKeyboard([
-          [Markup.button.callback('❌ Cancel Tracking', `cancel_${userId}`)],
-          [Markup.button.url('💎 Premium', 'https://t.me/Unixmachine')],
-          [Markup.button.url('📢 Official', 'https://t.me/buildwithargon')],
-        ])
-      );
-
-      // Start tracking wallet periodically
       activeIntervals[userId] = setInterval(async () => {
-        const tokenData = await checkWallet(userAddress);
-        if (tokenData && tokenData.tokens) {
-          tokenData.tokens.forEach((token) => {
-            const mintAddress = token.data.mintAddress || 'Unknown Mint';
-            const tokenName = token.data.name || 'Unknown Token';
-            const amount = (parseFloat(token.data.amount) || 0) / 1_000_000;
-            const symbol = token.data.symbol || 'Unknown Symbol';
+        const updatedData = await checkWallet(userAddress);
+        if (updatedData && updatedData.tokens) {
+          const newTokens = updatedData.tokens.filter(
+            (token) => !savedTokens[token.data.mintAddress]
+          );
 
-            if (!savedTokens[mintAddress]) {
-              savedTokens[mintAddress] = { name: tokenName, symbol, amount };
-              saveTokens(userId, savedTokens);
-
-              ctx.replyWithHTML(
-                `🚨 New token added: ${tokenName} (${symbol}): ${amount}\n💰 Mint Address: <code>${mintAddress}</code>`
-              );
-            }
-          });
+          if (newTokens.length) {
+            sendLimitedTokens(newTokens, savedTokens, ctx);
+          }
         }
       }, 150_000); // Check every 2.5 minutes
     }
 
-    // Remove the listener for this flow
     delete activeListeners[userId];
   };
 
-  // Store the listener in activeListeners and register it
   activeListeners[userId] = listener;
   bot.on('text', listener);
 });
