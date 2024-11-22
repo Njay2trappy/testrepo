@@ -25,9 +25,9 @@ script4.stderr.on('data', (data) => console.error(`bsc Error: ${data}`));
 script4.on('close', (code) => console.log(`bsc exited with code ${code}`));
 
 const script4 = spawn('node', ['whale.js']);
-script4.stdout.on('data', (data) => console.log(`whale Output: ${data}`));
-script4.stderr.on('data', (data) => console.error(`whale Error: ${data}`));
-script4.on('close', (code) => console.log(`whale exited with code ${code}`));
+script5.stdout.on('data', (data) => console.log(`whale Output: ${data}`));
+script5.stderr.on('data', (data) => console.error(`whale Error: ${data}`));
+script5.on('close', (code) => console.log(`whale exited with code ${code}`));
 
 
 
