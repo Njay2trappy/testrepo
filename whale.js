@@ -68,7 +68,7 @@ function clearTracking(userId, ctx) {
 
   // Send the user the welcome message to restart the bot
   ctx.reply(
-    `Nordon | Wallet Tracker👾\n\n🎯 Never miss any token purchased by your favourite WHALEs. Track their wallets, copy their trades, and make more profits.\n\n🔴 Due to high usage, wallets are tracked every 2 minutes.\n\n💎 Upgrade to Premium for faster tracking ⚡️\n\n🔥 Ready to track a WHALE wallet? 👇`,
+    `ARGON | Wallet Tracker👾\n\n🎯 Never miss any token purchased by your favorite WHALEs. Track their wallets, copy their trades, and make more profits.\n\n🔴 Due to high usage, wallets are tracked every 2 minutes.\n\n💎 Upgrade to Premium for faster tracking ⚡️\n\n🔥 Ready to track a WHALE wallet? 👇`,
     Markup.keyboard(['Track Wallet']).resize()
   );
 }
@@ -76,7 +76,7 @@ function clearTracking(userId, ctx) {
 // /start command
 bot.start((ctx) => {
   ctx.reply(
-    `Nordon | Wallet Tracker👾\n\n🎯 Never miss any token purchased by your favourite WHALEs. Track their wallets, copy their trades, and make more profits.\n\n🔴 Due to high usage, wallets are tracked every 2 minutes.\n\n💎 Upgrade to Premium for faster tracking ⚡️\n\n🔥 Ready to track a WHALE wallet? 👇`,
+    `ARGON | Wallet Tracker👾\n\n🎯 Never miss any token purchased by your favorite WHALEs. Track their wallets, copy their trades, and make more profits.\n\n🔴 Due to high usage, wallets are tracked every 2 minutes.\n\n💎 Upgrade to Premium for faster tracking ⚡️\n\n🔥 Ready to track a WHALE wallet? 👇`,
     Markup.keyboard(['Track Wallet']).resize()
   );
 });
