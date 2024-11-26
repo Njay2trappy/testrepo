@@ -21,8 +21,7 @@
     "fs": "0.0.1-security",
     "bs58": "^4.0.1",
     "web3":"^1.8.1",
-    "html-escape": "^1.0.0",
-    "bigint": "^1.1.5"
+    "html-escape": "^1.0.0"
   },
   "engines": {
     "node": ">=14.0.0"
