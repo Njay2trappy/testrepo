@@ -4,7 +4,13 @@
   "description": "A Telegram bot for processing Solana payments",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "build": "npm rebuild",
+    "postinstall": "npm rebuild" 
+  },
+  "engines": {
+    "node": ">=16.x",
+    "npm": ">=7.x"
   },
   "dependencies": {
     "@solana/web3.js": "^1.68.0",
@@ -15,7 +21,8 @@
     "fs": "0.0.1-security",
     "bs58": "^4.0.1",
     "web3":"^1.8.1",
-    "html-escape": "^1.0.0"
+    "html-escape": "^1.0.0",
+    "bigint": "^1.1.5"
   },
   "engines": {
     "node": ">=14.0.0"
