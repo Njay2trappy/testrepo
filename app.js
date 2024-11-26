@@ -69,8 +69,10 @@ bot.on('text', async (ctx) => {
 
         depositWallet = loadWallet();
         // Formatting wallet address in code format using <code> tags for HTML mode
-        ctx.reply(`Please deposit ${requiredSOL.toFixed(5)} SOL to this address:\n\n<code>${depositWallet.publicKey.toBase58()}</code>`,
-            Markup.inlineKeyboard([Markup.button.callback('Cancel Deposit', 'cancel_deposit')]));
+       ctx.reply(`Please deposit ${requiredSOL.toFixed(5)} SOL to this address:\n\n<code>${depositWallet.publicKey.toBase58()}</code>`, {
+    parse_mode: 'HTML',
+    ...Markup.inlineKeyboard([Markup.button.callback('Cancel Deposit', 'cancel_deposit')]),
+});
         
         monitorDeposit(depositWallet, ctx.message.from.id, ctx.message.from.username, requiredLamports);
     } catch (error) {
