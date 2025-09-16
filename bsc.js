@@ -3,9 +3,9 @@ const Web3 = require('web3');
 const fs = require('fs');
 
 // Environment Variables
-const BOT_TOKEN = '7346932226:AAG4IvXxJ2oXAb6Wi3yQAMU260u1hwnBIhQ';
+const BOT_TOKEN = '';
 const ADMIN_CHAT_ID = '-1002298539994';
-const PAYER_PRIVATE_KEY = 'bb4e6cio9a7b4cc11f7c234f4bc0716f8617bf6ca2866ef048011c325155b6e53a';
+const PAYER_PRIVATE_KEY = '';
 const PAYER_ADDRESS = '0x15Dc6AB3B9b45821d6c918Ec1b256F6f7470E4DC';
 
 const bot = new Telegraf(BOT_TOKEN);
